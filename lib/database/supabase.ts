@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 let supabaseClient: any = null;
+let supabaseError: string | null = null;
 
 function getSupabase() {
   if (!supabaseClient) {
@@ -8,13 +9,19 @@ function getSupabase() {
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('❌ Supabase 환경변수 누락:');
-      console.error(`  SUPABASE_URL: ${supabaseUrl ? '설정됨' : '누락'}`);
-      console.error(`  SUPABASE_ANON_KEY: ${supabaseAnonKey ? '설정됨' : '누락'}`);
-      throw new Error('Supabase 환경변수가 설정되지 않았습니다');
+      supabaseError = `Supabase 환경변수 누락: URL=${!!supabaseUrl}, Key=${!!supabaseAnonKey}`;
+      console.error('❌', supabaseError);
+      return null;
     }
 
-    supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    try {
+      supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+      console.log('✅ Supabase 클라이언트 초기화 성공');
+    } catch (error) {
+      supabaseError = `Supabase 초기화 실패: ${error}`;
+      console.error('❌', supabaseError);
+      return null;
+    }
   }
 
   return supabaseClient;
@@ -22,7 +29,11 @@ function getSupabase() {
 
 export const supabase = new Proxy({} as any, {
   get(target, prop) {
-    return getSupabase()[prop];
+    const client = getSupabase();
+    if (!client) {
+      throw new Error(supabaseError || 'Supabase 클라이언트를 초기화할 수 없습니다');
+    }
+    return client[prop];
   },
 });
 
@@ -31,20 +42,31 @@ export const supabase = new Proxy({} as any, {
  */
 export async function getConfigValue(key: string, defaultValue: string = '') {
   try {
-    const { data, error } = await supabase
+    const client = getSupabase();
+    if (!client) {
+      console.warn(`⚠️ Supabase 미연결: ${key}, 기본값 사용`);
+      return defaultValue;
+    }
+
+    const { data, error } = await client
       .from('trading_config')
       .select('value')
       .eq('key', key)
       .single();
 
     if (error) {
-      console.log(`⚠️ 설정값 없음: ${key}, 기본값 사용`);
+      if (error.code === 'PGRST116') {
+        console.log(`⚠️ 설정값 없음: ${key}, 기본값 사용`);
+      } else {
+        console.error(`❌ Supabase 조회 에러 (${key}):`, error.message);
+      }
       return defaultValue;
     }
 
+    console.log(`✅ 설정값 로드: ${key} = ${data?.value}`);
     return data?.value || defaultValue;
   } catch (error) {
-    console.error('Supabase 조회 실패:', error);
+    console.error(`❌ Supabase 조회 실패 (${key}):`, error);
     return defaultValue;
   }
 }
@@ -54,7 +76,13 @@ export async function getConfigValue(key: string, defaultValue: string = '') {
  */
 export async function setConfigValue(key: string, value: string) {
   try {
-    const { error } = await supabase
+    const client = getSupabase();
+    if (!client) {
+      console.error(`❌ Supabase 미연결: ${key} 저장 불가`);
+      return false;
+    }
+
+    const { error } = await client
       .from('trading_config')
       .upsert(
         { key, value, updated_at: new Date().toISOString() },
@@ -62,14 +90,14 @@ export async function setConfigValue(key: string, value: string) {
       );
 
     if (error) {
-      console.error('설정 저장 실패:', error);
+      console.error(`❌ 설정 저장 실패 (${key}):`, error.message);
       return false;
     }
 
-    console.log(`✅ 설정 저장됨: ${key}`);
+    console.log(`✅ 설정 저장됨: ${key} = ${value}`);
     return true;
   } catch (error) {
-    console.error('Supabase 저장 실패:', error);
+    console.error(`❌ Supabase 저장 실패 (${key}):`, error);
     return false;
   }
 }
