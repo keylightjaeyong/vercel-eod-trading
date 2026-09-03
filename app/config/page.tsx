@@ -47,8 +47,8 @@ export default function ConfigPage() {
     setSaving(true);
 
     try {
-      // localStorage에 즉시 저장
-      localStorage.setItem('trading_enabled', newState.toString());
+      // 쿠키에 즉시 저장 (30일 유효)
+      document.cookie = `trading_enabled=${newState};path=/;max-age=${30 * 24 * 60 * 60}`;
       setConfig({ ...config, enabled: newState });
       setMessage(`거래가 ${newState ? '활성화' : '비활성화'}되었습니다`);
       setTimeout(() => setMessage(''), 3000);

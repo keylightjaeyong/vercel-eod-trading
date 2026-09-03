@@ -38,11 +38,12 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // localStorage에서 초기값 복원 (마운트 시점에 동기적으로 실행)
+  // 쿠키에서 초기값 복원 (마운트 시점에 동기적으로 실행)
   const [tradingEnabled, setTradingEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
-    const stored = localStorage.getItem('trading_enabled');
-    return stored !== null ? stored === 'true' : true;
+    // 쿠키에서 값 읽기
+    const match = document.cookie.match(/trading_enabled=([^;]+)/);
+    return match ? match[1] === 'true' : true;
   });
 
   const [toggling, setToggling] = useState(false);
@@ -64,9 +65,9 @@ export default function Dashboard() {
     try {
       console.log('🔄 거래 상태 변경 시작:', tradingEnabled, '->', newState);
 
-      // localStorage에 즉시 저장 (동기적, 항상 성공)
-      localStorage.setItem('trading_enabled', newState.toString());
-      console.log('💾 localStorage에 저장:', 'trading_enabled=' + newState);
+      // 쿠키에 즉시 저장 (30일 유효)
+      document.cookie = `trading_enabled=${newState};path=/;max-age=${30 * 24 * 60 * 60}`;
+      console.log('🍪 쿠키에 저장:', 'trading_enabled=' + newState);
 
       setTradingEnabled(newState);
 
