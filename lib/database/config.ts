@@ -13,6 +13,10 @@ interface Config {
 
 const CONFIG_FILE = '/tmp/trading-config.json';
 
+// 메모리 캐시 (프로세스 수명 동안 유지)
+let configCache: Config | null = null;
+let lastConfigSave = 0;
+
 /**
  * 설정 저장소 (메모리 + /tmp 파일 저장)
  */
@@ -24,26 +28,38 @@ export class ConfigStore {
   }
 
   /**
-   * 설정 로드 (파일 > 환경변수 > 기본값 우선순위)
+   * 설정 로드 (캐시 > 파일 > 환경변수 > 기본값)
    */
   private loadConfig(): Config {
     try {
-      // 1. /tmp 파일에서 로드 시도
-      if (fs.existsSync(CONFIG_FILE)) {
-        const data = fs.readFileSync(CONFIG_FILE, 'utf-8');
-        const savedConfig = JSON.parse(data);
-        console.log('✅ 저장된 설정 로드됨');
-        return { ...defaultConfig, ...savedConfig } as Config;
+      // 1. 메모리 캐시 확인
+      if (configCache) {
+        console.log('✅ 캐시된 설정 로드');
+        return configCache;
       }
 
-      // 2. 기본값으로 시작
+      // 2. /tmp 파일에서 로드 시도
+      if (fs.existsSync(CONFIG_FILE)) {
+        try {
+          const data = fs.readFileSync(CONFIG_FILE, 'utf-8');
+          const savedConfig = JSON.parse(data);
+          console.log('✅ 저장된 설정 파일 로드됨');
+          configCache = { ...defaultConfig, ...savedConfig } as Config;
+          return configCache;
+        } catch (e) {
+          console.warn('파일 로드 실패, 기본값 사용');
+        }
+      }
+
+      // 3. 기본값으로 시작
       let config = { ...defaultConfig } as Config;
 
-      // 3. 환경변수에서 오버라이드
+      // 4. 환경변수에서 오버라이드
       if (process.env.TRADING_ENABLED !== undefined) {
         config.enabled = process.env.TRADING_ENABLED === 'true';
       }
 
+      configCache = config;
       return config;
     } catch (error) {
       console.warn('설정 로드 실패, 기본값 사용:', error);
@@ -52,19 +68,31 @@ export class ConfigStore {
   }
 
   /**
-   * 설정 저장 (/tmp 파일에 저장)
+   * 설정 저장 (/tmp 파일 + 메모리 캐시)
    */
   save(): void {
     try {
-      // 중요 필드만 저장 (enabled, buy, sell)
+      // 너무 자주 저장하지 않기 (1초 단위)
+      const now = Date.now();
+      if (now - lastConfigSave < 1000) {
+        return;
+      }
+
+      // 중요 필드만 저장
       const toSave = {
         enabled: this.config.enabled,
         buy: this.config.buy,
         sell: this.config.sell,
       };
 
+      // 파일에 저장
       fs.writeFileSync(CONFIG_FILE, JSON.stringify(toSave, null, 2), 'utf-8');
-      console.log('✅ 설정 저장됨');
+
+      // 메모리 캐시 업데이트
+      configCache = this.config;
+      lastConfigSave = now;
+
+      console.log('✅ 설정 저장됨 (파일 + 캐시)');
     } catch (error) {
       console.error('설정 저장 실패:', error);
     }
