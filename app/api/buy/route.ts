@@ -48,7 +48,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // 해당하는 매수 일정 찾기
     const buySchedule = config.buy.schedule;
-    const currentPhase = buySchedule.find((s) => s.time === currentTime);
+    const currentPhase = buySchedule.find((s: any) => s.time === currentTime);
 
     if (!currentPhase) {
       return NextResponse.json(

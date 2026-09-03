@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import defaultConfig from '@/config/default.json';
 
 interface Config {
@@ -12,10 +10,8 @@ interface Config {
   logging: any;
 }
 
-const CONFIG_PATH = process.env.DATABASE_PATH || '/tmp/eod-config.json';
-
 /**
- * 설정 저장소
+ * 설정 저장소 (메모리 기반 + 환경변수)
  */
 export class ConfigStore {
   private config: Config;
@@ -25,35 +21,32 @@ export class ConfigStore {
   }
 
   /**
-   * 설정 로드
+   * 설정 로드 (환경변수와 기본값 병합)
    */
   private loadConfig(): Config {
     try {
-      if (fs.existsSync(CONFIG_PATH)) {
-        const data = fs.readFileSync(CONFIG_PATH, 'utf-8');
-        return JSON.parse(data);
-      }
-    } catch (error) {
-      console.warn('설정 파일 로드 실패, 기본값 사용:', error);
-    }
+      // 기본값으로 시작
+      let config = { ...defaultConfig } as Config;
 
-    return { ...defaultConfig } as Config;
+      // 환경변수에서 오버라이드
+      if (process.env.TRADING_ENABLED !== undefined) {
+        config.enabled = process.env.TRADING_ENABLED === 'true';
+      }
+
+      return config;
+    } catch (error) {
+      console.warn('설정 로드 실패, 기본값 사용:', error);
+      return { ...defaultConfig } as Config;
+    }
   }
 
   /**
-   * 설정 저장
+   * 설정 저장 (메모리 전용 - Vercel serverless 환경)
    */
   save(): void {
-    try {
-      const dir = path.dirname(CONFIG_PATH);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify(this.config, null, 2), 'utf-8');
-    } catch (error) {
-      console.error('설정 저장 실패:', error);
-    }
+    // Vercel serverless 환경에서는 파일 저장 불가
+    // 메모리에만 유지 (재배포 시 리셋됨)
+    console.log('⚠️ 설정 변경 (메모리 전용, 재배포 시 초기화됨)');
   }
 
   /**
