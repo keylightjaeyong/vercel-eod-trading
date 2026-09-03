@@ -8,6 +8,12 @@ export async function GET(request: NextRequest) {
   try {
     const config = configStore.getAll();
 
+    // 쿠키에서 enabled 상태 확인
+    const cookieEnabled = request.cookies.get('trading_enabled');
+    if (cookieEnabled) {
+      config.enabled = cookieEnabled.value === 'true';
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -49,13 +55,22 @@ export async function POST(request: NextRequest) {
     // 활성화 상태 변경
     if (body.action === 'set_enabled') {
       configStore.setEnabled(body.enabled);
-      return NextResponse.json(
+
+      const response = NextResponse.json(
         {
           success: true,
           message: `거래가 ${body.enabled ? '활성화' : '비활성화'}되었습니다`,
         },
         { status: 200 }
       );
+
+      // 쿠키에 상태 저장 (30일)
+      response.cookies.set('trading_enabled', body.enabled.toString(), {
+        maxAge: 60 * 60 * 24 * 30,
+        path: '/',
+      });
+
+      return response;
     }
 
     // 종목 활성화 상태 변경

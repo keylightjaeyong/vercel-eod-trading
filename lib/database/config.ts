@@ -13,62 +13,55 @@ interface Config {
 
 const CONFIG_FILE = '/tmp/trading-config.json';
 
-// 메모리 캐시 (프로세스 수명 동안 유지)
+// 프로세스 수명 동안의 메모리 캐시
 let configCache: Config | null = null;
 let lastConfigSave = 0;
 
 /**
- * 설정 저장소 (메모리 + /tmp 파일 저장)
+ * 설정 저장소 (메모리 + /tmp 파일)
+ * Vercel serverless 환경에서는 /tmp가 요청 간에 공유되지 않을 수 있으므로
+ * 메모리 캐시를 우선으로 사용합니다.
  */
 export class ConfigStore {
   private config: Config;
 
   constructor() {
-    this.config = this.loadConfig();
+    // 이미 캐시된 설정이 있으면 사용
+    if (configCache) {
+      this.config = JSON.parse(JSON.stringify(configCache));
+      console.log('✅ 메모리 캐시에서 설정 로드');
+    } else {
+      this.config = this.loadConfigFromFile();
+    }
   }
 
   /**
-   * 설정 로드 (캐시 > 파일 > 환경변수 > 기본값)
+   * 파일에서 설정 로드
    */
-  private loadConfig(): Config {
+  private loadConfigFromFile(): Config {
     try {
-      // 1. 메모리 캐시 확인
-      if (configCache) {
-        console.log('✅ 캐시된 설정 로드');
-        return configCache;
-      }
-
-      // 2. /tmp 파일에서 로드 시도
+      // /tmp 파일에서 시도
       if (fs.existsSync(CONFIG_FILE)) {
         try {
           const data = fs.readFileSync(CONFIG_FILE, 'utf-8');
           const savedConfig = JSON.parse(data);
-          console.log('✅ 저장된 설정 파일 로드됨');
-          configCache = { ...defaultConfig, ...savedConfig } as Config;
-          return configCache;
+          console.log('✅ 파일에서 설정 로드');
+          return { ...defaultConfig, ...savedConfig } as Config;
         } catch (e) {
-          console.warn('파일 로드 실패, 기본값 사용');
+          console.warn('파일 파싱 실패');
         }
       }
 
-      // 3. 기본값으로 시작
-      let config = { ...defaultConfig } as Config;
-
-      // 4. 환경변수에서 오버라이드
-      if (process.env.TRADING_ENABLED !== undefined) {
-        config.enabled = process.env.TRADING_ENABLED === 'true';
-      }
-
-      configCache = config;
-      return config;
+      // 기본값 사용
+      return { ...defaultConfig } as Config;
     } catch (error) {
-      console.warn('설정 로드 실패, 기본값 사용:', error);
+      console.warn('설정 로드 실패:', error);
       return { ...defaultConfig } as Config;
     }
   }
 
   /**
-   * 설정 저장 (/tmp 파일 + 메모리 캐시)
+   * 설정 저장 (파일 + 메모리 캐시)
    */
   save(): void {
     try {
@@ -78,21 +71,20 @@ export class ConfigStore {
         return;
       }
 
-      // 중요 필드만 저장
+      // 파일에 저장
       const toSave = {
         enabled: this.config.enabled,
         buy: this.config.buy,
         sell: this.config.sell,
       };
 
-      // 파일에 저장
       fs.writeFileSync(CONFIG_FILE, JSON.stringify(toSave, null, 2), 'utf-8');
 
-      // 메모리 캐시 업데이트
-      configCache = this.config;
+      // **가장 중요: 메모리 캐시 업데이트**
+      configCache = JSON.parse(JSON.stringify(this.config));
       lastConfigSave = now;
 
-      console.log('✅ 설정 저장됨 (파일 + 캐시)');
+      console.log('✅ 설정 저장됨');
     } catch (error) {
       console.error('설정 저장 실패:', error);
     }
