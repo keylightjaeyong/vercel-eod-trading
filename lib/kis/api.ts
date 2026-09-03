@@ -88,7 +88,7 @@ export class KISApi {
 
     return {
       'content-type': 'application/json; charset=utf-8',
-      authorization: `Bearer ${token}`,
+      authorization: token,
       appkey: this.appKey,
       appsecret: this.appSecret,
       tr_id: trId,
