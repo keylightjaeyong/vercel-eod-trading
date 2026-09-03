@@ -47,21 +47,23 @@ export default function ConfigPage() {
     setSaving(true);
 
     try {
-      // 쿠키에 즉시 저장 (30일 유효)
-      document.cookie = `trading_enabled=${newState};path=/;max-age=${30 * 24 * 60 * 60}`;
-      setConfig({ ...config, enabled: newState });
-      setMessage(`거래가 ${newState ? '활성화' : '비활성화'}되었습니다`);
-      setTimeout(() => setMessage(''), 3000);
-
-      // 동시에 API에도 저장 시도 (실패해도 무시)
-      fetch('/api/config', {
+      // API에 저장 (서버가 쿠키 설정)
+      const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'set_enabled',
           enabled: newState,
         }),
-      }).catch(err => console.error('API 저장 실패:', err));
+      });
+
+      if (res.ok) {
+        setConfig({ ...config, enabled: newState });
+        setMessage(`거래가 ${newState ? '활성화' : '비활성화'}되었습니다`);
+        setTimeout(() => setMessage(''), 3000);
+      } else {
+        setMessage('저장 실패');
+      }
     } catch (error) {
       setMessage('저장 실패');
     } finally {

@@ -38,13 +38,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 쿠키에서 초기값 복원 (마운트 시점에 동기적으로 실행)
-  const [tradingEnabled, setTradingEnabled] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    // 쿠키에서 값 읽기
-    const match = document.cookie.match(/trading_enabled=([^;]+)/);
-    return match ? match[1] === 'true' : true;
-  });
+  // 초기값: true (서버가 API 응답으로 쿠키 값을 반영)
+  const [tradingEnabled, setTradingEnabled] = useState(true);
 
   const [toggling, setToggling] = useState(false);
 
@@ -63,25 +58,22 @@ export default function Dashboard() {
     const newState = !tradingEnabled;
 
     try {
-      console.log('🔄 거래 상태 변경 시작:', tradingEnabled, '->', newState);
-
-      // 쿠키에 즉시 저장 (30일 유효)
-      document.cookie = `trading_enabled=${newState};path=/;max-age=${30 * 24 * 60 * 60}`;
-      console.log('🍪 쿠키에 저장:', 'trading_enabled=' + newState);
-
-      setTradingEnabled(newState);
-
-      // 동시에 API에도 저장 시도 (비동기, 실패해도 무시)
-      fetch('/api/config', {
+      // API에 저장 (서버가 쿠키 설정)
+      const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'set_enabled',
           enabled: newState,
         }),
-      }).catch(err => console.error('⚠️ API 저장 실패:', err));
+      });
+
+      if (res.ok) {
+        setTradingEnabled(newState);
+      } else {
+        setError('거래 상태 변경 실패');
+      }
     } catch (err) {
-      console.error('❌ 거래 상태 변경 실패:', err);
       setError('거래 상태 변경 중 오류 발생');
     } finally {
       setToggling(false);
@@ -90,22 +82,11 @@ export default function Dashboard() {
 
   const fetchTradingState = async () => {
     try {
-      // localStorage에서 먼저 확인 (가장 빠르고 신뢰할 수 있음)
-      const storedValue = localStorage.getItem('trading_enabled');
-      if (storedValue !== null) {
-        setTradingEnabled(storedValue === 'true');
-        console.log('✅ localStorage에서 상태 로드:', storedValue);
-        return;
-      }
-
-      // localStorage에 없으면 API에서 조회
+      // API에서 서버 쿠키 값을 반영한 상태 조회
       const res = await fetch('/api/config');
       if (res.ok) {
         const data = await res.json();
-        const enabled = data.data?.enabled ?? true;
-        setTradingEnabled(enabled);
-        localStorage.setItem('trading_enabled', enabled.toString());
-        console.log('✅ API에서 상태 로드:', enabled);
+        setTradingEnabled(data.data?.enabled ?? true);
       }
     } catch (err) {
       console.error('거래 상태 조회 실패:', err);
