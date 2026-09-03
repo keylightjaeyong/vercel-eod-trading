@@ -66,6 +66,9 @@ export async function POST(request: NextRequest) {
         {
           success: true,
           message: `거래가 ${body.enabled ? '활성화' : '비활성화'}되었습니다`,
+          data: {
+            enabled: body.enabled
+          }
         },
         { status: 200 }
       );
