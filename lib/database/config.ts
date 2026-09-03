@@ -1,4 +1,5 @@
 import defaultConfig from '@/config/default.json';
+import * as fs from 'fs';
 
 interface Config {
   enabled: boolean;
@@ -10,8 +11,10 @@ interface Config {
   logging: any;
 }
 
+const CONFIG_FILE = '/tmp/trading-config.json';
+
 /**
- * 설정 저장소 (메모리 기반 + 환경변수)
+ * 설정 저장소 (메모리 + /tmp 파일 저장)
  */
 export class ConfigStore {
   private config: Config;
@@ -21,14 +24,22 @@ export class ConfigStore {
   }
 
   /**
-   * 설정 로드 (환경변수와 기본값 병합)
+   * 설정 로드 (파일 > 환경변수 > 기본값 우선순위)
    */
   private loadConfig(): Config {
     try {
-      // 기본값으로 시작
+      // 1. /tmp 파일에서 로드 시도
+      if (fs.existsSync(CONFIG_FILE)) {
+        const data = fs.readFileSync(CONFIG_FILE, 'utf-8');
+        const savedConfig = JSON.parse(data);
+        console.log('✅ 저장된 설정 로드됨');
+        return { ...defaultConfig, ...savedConfig } as Config;
+      }
+
+      // 2. 기본값으로 시작
       let config = { ...defaultConfig } as Config;
 
-      // 환경변수에서 오버라이드
+      // 3. 환경변수에서 오버라이드
       if (process.env.TRADING_ENABLED !== undefined) {
         config.enabled = process.env.TRADING_ENABLED === 'true';
       }
@@ -41,12 +52,22 @@ export class ConfigStore {
   }
 
   /**
-   * 설정 저장 (메모리 전용 - Vercel serverless 환경)
+   * 설정 저장 (/tmp 파일에 저장)
    */
   save(): void {
-    // Vercel serverless 환경에서는 파일 저장 불가
-    // 메모리에만 유지 (재배포 시 리셋됨)
-    console.log('⚠️ 설정 변경 (메모리 전용, 재배포 시 초기화됨)');
+    try {
+      // 중요 필드만 저장 (enabled, buy, sell)
+      const toSave = {
+        enabled: this.config.enabled,
+        buy: this.config.buy,
+        sell: this.config.sell,
+      };
+
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(toSave, null, 2), 'utf-8');
+      console.log('✅ 설정 저장됨');
+    } catch (error) {
+      console.error('설정 저장 실패:', error);
+    }
   }
 
   /**
