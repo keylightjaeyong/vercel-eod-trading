@@ -7,6 +7,11 @@ import { getConfigValue, setConfigValue, getConfigJSON, setConfigJSON } from '@/
  */
 export async function GET(request: NextRequest) {
   try {
+    // 환경변수 확인 (디버깅용)
+    const hasUrl = !!process.env.SUPABASE_URL;
+    const hasKey = !!process.env.SUPABASE_ANON_KEY;
+    console.log('📋 환경변수 체크: URL=' + (hasUrl ? '✅' : '❌'), 'Key=' + (hasKey ? '✅' : '❌'));
+
     const config = configStore.getAll();
 
     // Supabase에서 enabled 상태 확인 (임시로 실패해도 계속)
