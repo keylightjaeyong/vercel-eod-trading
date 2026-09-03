@@ -1,9 +1,30 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+let supabaseClient: any = null;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+function getSupabase() {
+  if (!supabaseClient) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('❌ Supabase 환경변수 누락:');
+      console.error(`  SUPABASE_URL: ${supabaseUrl ? '설정됨' : '누락'}`);
+      console.error(`  SUPABASE_ANON_KEY: ${supabaseAnonKey ? '설정됨' : '누락'}`);
+      throw new Error('Supabase 환경변수가 설정되지 않았습니다');
+    }
+
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+  }
+
+  return supabaseClient;
+}
+
+export const supabase = new Proxy({} as any, {
+  get(target, prop) {
+    return getSupabase()[prop];
+  },
+});
 
 /**
  * Supabase에서 설정 값 가져오기
