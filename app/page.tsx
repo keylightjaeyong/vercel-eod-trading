@@ -37,12 +37,38 @@ export default function Dashboard() {
   const [exits, setExits] = useState<Exit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tradingEnabled, setTradingEnabled] = useState(true);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleToggleTrading = async () => {
+    setToggling(true);
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'set_enabled',
+          enabled: !tradingEnabled,
+        }),
+      });
+
+      if (res.ok) {
+        setTradingEnabled(!tradingEnabled);
+      } else {
+        setError('거래 상태 변경 실패');
+      }
+    } catch (err) {
+      setError('거래 상태 변경 중 오류 발생');
+    } finally {
+      setToggling(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -81,7 +107,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-4">
           <h1 className="text-4xl font-bold text-white">📊 EOD Trading Dashboard</h1>
           <div className="flex gap-3">
             <Link href="/config" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
@@ -89,6 +115,33 @@ export default function Dashboard() {
             </Link>
             <button onClick={fetchData} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition">
               🔄 새로고침
+            </button>
+          </div>
+        </div>
+
+        {/* 거래 활성화/비활성화 토글 */}
+        <div className="bg-gradient-to-r from-slate-700 to-slate-800 border-2 border-slate-600 rounded-lg p-4 mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-white font-bold text-lg">
+                {tradingEnabled ? '🟢 자동 거래 활성화 중' : '🔴 자동 거래 중지됨'}
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                {tradingEnabled
+                  ? '다음 거래 시간에 자동으로 매수/매도 실행됩니다'
+                  : '수동으로 활성화할 때까지 자동 거래가 중지됩니다'}
+              </p>
+            </div>
+            <button
+              onClick={handleToggleTrading}
+              disabled={toggling}
+              className={`px-6 py-3 rounded-lg font-bold text-white transition text-lg whitespace-nowrap ml-4 ${
+                tradingEnabled
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-green-600 hover:bg-green-700'
+              } ${toggling ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {toggling ? '변경 중...' : tradingEnabled ? '🛑 중지' : '▶️ 시작'}
             </button>
           </div>
         </div>
