@@ -65,8 +65,17 @@ export class KISApi {
       this.tokenExpiry = now + (response.data.expires_in || 3600);
 
       return this.accessToken;
-    } catch (error) {
-      console.error('토큰 갱신 실패:', error);
+    } catch (error: any) {
+      console.error('토큰 갱신 실패:', error?.response?.data || error?.message);
+
+      // Rate limit 에러면 기존 토큰 사용 시도
+      if (error?.response?.data?.error_code === 'EGW00133') {
+        if (this.accessToken) {
+          console.warn('⚠️ Rate limit 감지, 기존 토큰 재사용');
+          return this.accessToken;
+        }
+      }
+
       throw new Error('KIS API 인증 실패');
     }
   }
