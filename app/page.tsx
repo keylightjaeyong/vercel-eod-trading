@@ -42,7 +42,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000);
+    fetchTradingState();
+    const interval = setInterval(() => {
+      fetchData();
+      fetchTradingState();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -69,6 +73,18 @@ export default function Dashboard() {
       setError('거래 상태 변경 중 오류 발생');
     } finally {
       setToggling(false);
+    }
+  };
+
+  const fetchTradingState = async () => {
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const data = await res.json();
+        setTradingEnabled(data.data?.enabled ?? true);
+      }
+    } catch (err) {
+      console.error('거래 상태 조회 실패:', err);
     }
   };
 
