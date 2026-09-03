@@ -62,8 +62,12 @@ export default function Dashboard() {
     const newState = !tradingEnabled;
 
     try {
+      console.log('🔄 거래 상태 변경 시작:', tradingEnabled, '->', newState);
+
       // localStorage에 즉시 저장 (동기적, 항상 성공)
       localStorage.setItem('trading_enabled', newState.toString());
+      console.log('💾 localStorage에 저장:', 'trading_enabled=' + newState);
+
       setTradingEnabled(newState);
 
       // 동시에 API에도 저장 시도 (비동기, 실패해도 무시)
@@ -74,8 +78,9 @@ export default function Dashboard() {
           action: 'set_enabled',
           enabled: newState,
         }),
-      }).catch(err => console.error('API 저장 실패:', err));
+      }).catch(err => console.error('⚠️ API 저장 실패:', err));
     } catch (err) {
+      console.error('❌ 거래 상태 변경 실패:', err);
       setError('거래 상태 변경 중 오류 발생');
     } finally {
       setToggling(false);
