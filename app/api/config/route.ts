@@ -7,21 +7,13 @@ import { getConfigValue, setConfigValue, getConfigJSON, setConfigJSON } from '@/
  */
 export async function GET(request: NextRequest) {
   try {
-    // 환경변수 확인 (디버깅용)
-    const hasUrl = !!process.env.SUPABASE_URL;
-    const hasKey = !!process.env.SUPABASE_ANON_KEY;
-    console.log('📋 환경변수 체크: URL=' + (hasUrl ? '✅' : '❌'), 'Key=' + (hasKey ? '✅' : '❌'));
-
     const config = configStore.getAll();
 
-    // Supabase에서 enabled 상태 확인 (임시로 실패해도 계속)
-    try {
-      const enabledValue = await getConfigValue('trading_enabled', config.enabled.toString());
-      config.enabled = enabledValue === 'true';
-      console.log('✅ Supabase에서 상태 로드:', enabledValue);
-    } catch (supabaseError) {
-      console.error('⚠️ Supabase 조회 실패, configStore 사용:', supabaseError);
-      // Supabase 실패해도 configStore의 값 사용
+    // 쿠키에서 enabled 상태 확인 (가장 신뢰할 수 있는 소스)
+    const cookieValue = request.cookies.get('trading_enabled')?.value;
+    if (cookieValue !== undefined) {
+      config.enabled = cookieValue === 'true';
+      console.log('🍪 쿠키에서 상태 로드:', cookieValue);
     }
 
     return NextResponse.json(
