@@ -41,6 +41,12 @@ export default function Dashboard() {
   const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
+    // 로컬 스토리지에서 거래 상태 복원
+    const saved = localStorage.getItem('trading_enabled');
+    if (saved !== null) {
+      setTradingEnabled(saved === 'true');
+    }
+
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
@@ -48,18 +54,22 @@ export default function Dashboard() {
 
   const handleToggleTrading = async () => {
     setToggling(true);
+    const newState = !tradingEnabled;
+
     try {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'set_enabled',
-          enabled: !tradingEnabled,
+          enabled: newState,
         }),
       });
 
       if (res.ok) {
-        setTradingEnabled(!tradingEnabled);
+        setTradingEnabled(newState);
+        // 로컬 스토리지에 상태 저장
+        localStorage.setItem('trading_enabled', newState.toString());
       } else {
         setError('거래 상태 변경 실패');
       }
