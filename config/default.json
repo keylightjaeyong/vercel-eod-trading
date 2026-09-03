@@ -1,0 +1,103 @@
+{
+  "enabled": true,
+  "account": {
+    "account_id": "44291220-01",
+    "capital_mode": "dynamic",
+    "fixed_capital": 5000000
+  },
+  "stocks": [
+    {
+      "code": "000660",
+      "name": "SK하이닉스",
+      "enabled": true
+    },
+    {
+      "code": "005930",
+      "name": "삼성전자",
+      "enabled": true
+    },
+    {
+      "code": "042700",
+      "name": "한미반도체",
+      "enabled": false
+    }
+  ],
+  "buy": {
+    "enabled": true,
+    "schedule": [
+      {
+        "phase": 1,
+        "time": "15:50",
+        "ratio": 0.25,
+        "market": "KOSPI",
+        "min_qty": 100,
+        "us_signal_required": true
+      },
+      {
+        "phase": 2,
+        "time": "19:00",
+        "ratio": 0.25,
+        "market": "NXT",
+        "min_qty": 100,
+        "condition": "price_up_5pct"
+      },
+      {
+        "phase": 3,
+        "time": "19:45",
+        "ratio": 0.50,
+        "market": "NXT",
+        "min_qty": 100,
+        "condition": "price_up_8pct"
+      }
+    ],
+    "us_market_signal": {
+      "check_time": "15:40",
+      "nasdaq_threshold": 1.0,
+      "sp500_threshold": 0.5,
+      "usdkrw_min": 1250,
+      "usdkrw_max": 1350,
+      "oil_min": 80,
+      "oil_max": 120
+    }
+  },
+  "sell": {
+    "enabled": true,
+    "schedule": {
+      "start_time": "08:00",
+      "end_time": "11:30",
+      "check_interval": 300,
+      "conditions": [
+        {
+          "type": "take_profit",
+          "threshold": 4.0,
+          "action": "sell_all"
+        },
+        {
+          "type": "stop_loss",
+          "threshold": -2.0,
+          "action": "sell_all"
+        },
+        {
+          "type": "time_end",
+          "time": "11:30",
+          "action": "force_sell"
+        }
+      ]
+    }
+  },
+  "telegram": {
+    "enabled": true,
+    "notifications": {
+      "buy": true,
+      "sell": true,
+      "error": true,
+      "daily_report": true
+    },
+    "report_time": "18:00"
+  },
+  "logging": {
+    "level": "info",
+    "save_csv": true,
+    "save_json": false
+  }
+}

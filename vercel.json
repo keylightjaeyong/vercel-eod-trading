@@ -1,0 +1,35 @@
+{
+  "crons": [
+    {
+      "path": "/api/market-signal",
+      "schedule": "40 15 * * 1-5"
+    },
+    {
+      "path": "/api/buy",
+      "schedule": "50 15 * * 1-5"
+    },
+    {
+      "path": "/api/buy",
+      "schedule": "0 19 * * 1-5"
+    },
+    {
+      "path": "/api/buy",
+      "schedule": "45 19 * * 1-5"
+    },
+    {
+      "path": "/api/sell",
+      "schedule": "0 8 * * 1-5"
+    },
+    {
+      "path": "/api/sell",
+      "schedule": "5 8-11 * * 1-5"
+    },
+    {
+      "path": "/api/sell",
+      "schedule": "30 11 * * 1-5"
+    }
+  ],
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install"
+}
