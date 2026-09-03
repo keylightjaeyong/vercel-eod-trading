@@ -23,12 +23,6 @@ export default function ConfigPage() {
 
   useEffect(() => {
     fetchConfig();
-
-    // 로컬 스토리지에서 상태 복원
-    const saved = localStorage.getItem('trading_enabled');
-    if (saved !== null && config) {
-      setConfig({ ...config, enabled: saved === 'true' });
-    }
   }, []);
 
   const fetchConfig = async () => {
@@ -64,8 +58,6 @@ export default function ConfigPage() {
 
       if (res.ok) {
         setConfig({ ...config, enabled: newState });
-        // 로컬 스토리지에 상태 저장
-        localStorage.setItem('trading_enabled', newState.toString());
         setMessage(`거래가 ${newState ? '활성화' : '비활성화'}되었습니다`);
         setTimeout(() => setMessage(''), 3000);
       }

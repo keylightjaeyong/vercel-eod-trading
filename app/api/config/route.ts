@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { configStore } from '@/lib/database/config';
+import { getConfigValue, setConfigValue, getConfigJSON, setConfigJSON } from '@/lib/database/supabase';
 
 /**
  * GET /api/config - 설정 조회
@@ -8,11 +9,9 @@ export async function GET(request: NextRequest) {
   try {
     const config = configStore.getAll();
 
-    // 쿠키에서 enabled 상태 확인
-    const cookieEnabled = request.cookies.get('trading_enabled');
-    if (cookieEnabled) {
-      config.enabled = cookieEnabled.value === 'true';
-    }
+    // Supabase에서 enabled 상태 확인
+    const enabledValue = await getConfigValue('trading_enabled', config.enabled.toString());
+    config.enabled = enabledValue === 'true';
 
     return NextResponse.json(
       {
@@ -56,6 +55,9 @@ export async function POST(request: NextRequest) {
     if (body.action === 'set_enabled') {
       configStore.setEnabled(body.enabled);
 
+      // Supabase에 상태 저장
+      await setConfigValue('trading_enabled', body.enabled.toString());
+
       const response = NextResponse.json(
         {
           success: true,
@@ -64,7 +66,7 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
 
-      // 쿠키에 상태 저장 (30일)
+      // 쿠키에도 상태 저장 (캐싱용)
       response.cookies.set('trading_enabled', body.enabled.toString(), {
         maxAge: 60 * 60 * 24 * 30,
         path: '/',
