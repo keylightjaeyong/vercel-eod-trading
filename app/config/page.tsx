@@ -47,20 +47,21 @@ export default function ConfigPage() {
     setSaving(true);
 
     try {
-      const res = await fetch('/api/config', {
+      // localStorage에 즉시 저장
+      localStorage.setItem('trading_enabled', newState.toString());
+      setConfig({ ...config, enabled: newState });
+      setMessage(`거래가 ${newState ? '활성화' : '비활성화'}되었습니다`);
+      setTimeout(() => setMessage(''), 3000);
+
+      // 동시에 API에도 저장 시도 (실패해도 무시)
+      fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'set_enabled',
           enabled: newState,
         }),
-      });
-
-      if (res.ok) {
-        setConfig({ ...config, enabled: newState });
-        setMessage(`거래가 ${newState ? '활성화' : '비활성화'}되었습니다`);
-        setTimeout(() => setMessage(''), 3000);
-      }
+      }).catch(err => console.error('API 저장 실패:', err));
     } catch (error) {
       setMessage('저장 실패');
     } finally {

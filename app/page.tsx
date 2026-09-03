@@ -55,20 +55,19 @@ export default function Dashboard() {
     const newState = !tradingEnabled;
 
     try {
-      const res = await fetch('/api/config', {
+      // localStorage에 즉시 저장 (동기적, 항상 성공)
+      localStorage.setItem('trading_enabled', newState.toString());
+      setTradingEnabled(newState);
+
+      // 동시에 API에도 저장 시도 (비동기, 실패해도 무시)
+      fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'set_enabled',
           enabled: newState,
         }),
-      });
-
-      if (res.ok) {
-        setTradingEnabled(newState);
-      } else {
-        setError('거래 상태 변경 실패');
-      }
+      }).catch(err => console.error('API 저장 실패:', err));
     } catch (err) {
       setError('거래 상태 변경 중 오류 발생');
     } finally {
@@ -78,10 +77,22 @@ export default function Dashboard() {
 
   const fetchTradingState = async () => {
     try {
+      // localStorage에서 먼저 확인 (가장 빠르고 신뢰할 수 있음)
+      const storedValue = localStorage.getItem('trading_enabled');
+      if (storedValue !== null) {
+        setTradingEnabled(storedValue === 'true');
+        console.log('✅ localStorage에서 상태 로드:', storedValue);
+        return;
+      }
+
+      // localStorage에 없으면 API에서 조회
       const res = await fetch('/api/config');
       if (res.ok) {
         const data = await res.json();
-        setTradingEnabled(data.data?.enabled ?? true);
+        const enabled = data.data?.enabled ?? true;
+        setTradingEnabled(enabled);
+        localStorage.setItem('trading_enabled', enabled.toString());
+        console.log('✅ API에서 상태 로드:', enabled);
       }
     } catch (err) {
       console.error('거래 상태 조회 실패:', err);
