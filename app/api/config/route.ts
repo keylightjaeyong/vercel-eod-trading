@@ -9,9 +9,15 @@ export async function GET(request: NextRequest) {
   try {
     const config = configStore.getAll();
 
-    // Supabase에서 enabled 상태 확인
-    const enabledValue = await getConfigValue('trading_enabled', config.enabled.toString());
-    config.enabled = enabledValue === 'true';
+    // Supabase에서 enabled 상태 확인 (임시로 실패해도 계속)
+    try {
+      const enabledValue = await getConfigValue('trading_enabled', config.enabled.toString());
+      config.enabled = enabledValue === 'true';
+      console.log('✅ Supabase에서 상태 로드:', enabledValue);
+    } catch (supabaseError) {
+      console.error('⚠️ Supabase 조회 실패, configStore 사용:', supabaseError);
+      // Supabase 실패해도 configStore의 값 사용
+    }
 
     return NextResponse.json(
       {
@@ -21,6 +27,7 @@ export async function GET(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    console.error('❌ GET /api/config 에러:', error);
     return NextResponse.json(
       {
         success: false,
