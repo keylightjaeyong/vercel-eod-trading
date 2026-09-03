@@ -41,6 +41,13 @@ export default function Dashboard() {
   const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
+    // localStorage에서 먼저 복원 (동기적, 즉시 실행)
+    const storedValue = localStorage.getItem('trading_enabled');
+    if (storedValue !== null) {
+      setTradingEnabled(storedValue === 'true');
+      console.log('✅ localStorage에서 상태 로드:', storedValue);
+    }
+
     fetchData();
     fetchTradingState();
     const interval = setInterval(() => {
