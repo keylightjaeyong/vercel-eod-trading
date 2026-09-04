@@ -30,9 +30,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 쿠키에서 계좌ID 읽기
-    let accountId = request.cookies.get('kis_account_id')?.value || '';
-    console.log('🍪 쿠키 계좌ID:', accountId ? '✅' : '❌');
+    // 헤더에서 계좌ID 읽기
+    let accountId = request.headers.get('x-account-id') || '';
+    console.log('📋 헤더 계좌ID:', accountId ? '✅' : '❌');
+
+    // 헤더에 없으면 쿠키에서 읽기
+    if (!accountId) {
+      accountId = request.cookies.get('kis_account_id')?.value || '';
+      console.log('🍪 쿠키 계좌ID:', accountId ? '✅' : '❌');
+    }
 
     // 쿠키에 없으면 Supabase에서 읽기
     if (!accountId) {

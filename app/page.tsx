@@ -93,6 +93,14 @@ export default function Dashboard() {
 
     setSavingAccount(true);
     try {
+      // 로컬스토리지에 저장
+      try {
+        localStorage.setItem('kis_account_id', accountInput.trim());
+      } catch (e) {
+        console.warn('localStorage 저장 실패:', e);
+      }
+
+      // API에도 저장 (Supabase)
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,7 +115,7 @@ export default function Dashboard() {
         setAccountInput('');
         setError(null);
         // 계좌 정보 다시 로드
-        setTimeout(() => fetchData(), 1000);
+        setTimeout(() => fetchData(), 500);
       } else {
         const data = await res.json();
         setError(data.error || '계좌ID 저장 실패');
@@ -135,7 +143,11 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const accountRes = await fetch('/api/account');
+      const accountRes = await fetch('/api/account', {
+        headers: {
+          'X-Account-ID': localStorage.getItem('kis_account_id') || '',
+        }
+      });
       if (accountRes.ok) {
         const accountData = await accountRes.json();
         setAccount(accountData.data);
