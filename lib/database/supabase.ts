@@ -40,7 +40,7 @@ export const supabase = new Proxy({} as any, {
 /**
  * Supabase에서 설정 값 가져오기
  */
-export async function getConfigValue(key: string, defaultValue: string = '') {
+export async function getConfigValue(key: string, defaultValue: string = ''): Promise<string> {
   try {
     const client = getSupabase();
     if (!client) {
