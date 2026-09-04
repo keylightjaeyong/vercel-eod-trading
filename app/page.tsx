@@ -308,9 +308,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
                   <p className="text-gray-400 text-sm mb-2">💰 잔액</p>
-                  <p className="text-2xl font-bold text-white">{account.balance >= 1_000_000
-                    ? (account.balance / 1_000_000).toFixed(2) + 'M'
-                    : account.balance.toLocaleString() + '원'}</p>
+                  <p className="text-2xl font-bold text-white">{account ? (account.balance >= 1_000_000 ? (account.balance / 1_000_000).toFixed(2) + 'M' : account.balance.toLocaleString() + '원') : '-'}</p>
                 </div>
                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
                   <p className="text-gray-400 text-sm mb-2">📈 평가금</p>
