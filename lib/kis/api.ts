@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { getConfigValue, setConfigValue } from '@/lib/database/supabase';
 
 interface TokenResponse {
   access_token: string;
@@ -58,9 +59,25 @@ export class KISApi {
   async getToken(): Promise<string> {
     const now = Date.now() / 1000;
 
-    // 토큰이 유효하면 재사용
+    // 로컬 메모리 캐시 확인
     if (this.accessToken && now < this.tokenExpiry - 60) {
       return this.accessToken;
+    }
+
+    // Supabase에서 캐시된 토큰 확인
+    try {
+      const cachedToken = await getConfigValue('kis_token', '');
+      const cachedExpiry = await getConfigValue('kis_token_expiry', '0');
+      const expiryTime = parseInt(cachedExpiry, 10);
+
+      if (cachedToken && expiryTime && now < expiryTime - 60) {
+        console.log('✅ Supabase에서 캐시된 토큰 사용');
+        this.accessToken = cachedToken;
+        this.tokenExpiry = expiryTime;
+        return this.accessToken;
+      }
+    } catch (dbError) {
+      console.warn('⚠️ Supabase 캐시 조회 실패:', dbError);
     }
 
     try {
@@ -73,15 +90,30 @@ export class KISApi {
       this.accessToken = response.data.access_token;
       this.tokenExpiry = now + (response.data.expires_in || 3600);
 
+      // Supabase에 토큰 캐시
+      try {
+        await setConfigValue('kis_token', this.accessToken);
+        await setConfigValue('kis_token_expiry', this.tokenExpiry.toString());
+        console.log('💾 토큰을 Supabase에 캐싱');
+      } catch (dbError) {
+        console.warn('⚠️ Supabase 캐싱 실패:', dbError);
+      }
+
       return this.accessToken;
     } catch (error: any) {
       console.error('토큰 갱신 실패:', error?.response?.data || error?.message);
 
-      // Rate limit 에러면 기존 토큰 사용 시도
+      // Rate limit 에러면 캐시된 토큰 사용 시도
       if (error?.response?.data?.error_code === 'EGW00133') {
-        if (this.accessToken) {
-          console.warn('⚠️ Rate limit 감지, 기존 토큰 재사용');
-          return this.accessToken;
+        try {
+          const cachedToken = await getConfigValue('kis_token', '');
+          if (cachedToken) {
+            console.warn('⚠️ Rate limit 감지, Supabase 캐시 토큰 재사용');
+            this.accessToken = cachedToken;
+            return this.accessToken;
+          }
+        } catch (e) {
+          console.warn('⚠️ 캐시된 토큰 조회 실패');
         }
       }
 
