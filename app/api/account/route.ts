@@ -30,22 +30,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 헤더에서 계좌ID 읽기
-    let accountId = request.headers.get('x-account-id') || '';
-    console.log('📋 헤더 계좌ID:', accountId ? '✅' : '❌');
+    // 쿠키에서 계좌ID 읽기
+    const cookieString = request.headers.get('cookie') || '';
+    console.log('📋 쿠키 문자열:', cookieString);
 
-    // 헤더에 없으면 쿠키에서 읽기
-    if (!accountId) {
-      accountId = request.cookies.get('kis_account_id')?.value || '';
-      console.log('🍪 쿠키 계좌ID:', accountId ? '✅' : '❌');
-    }
+    let accountId = '';
+    const cookies = cookieString.split(';').reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
 
-    // 쿠키에 없으면 Supabase에서 읽기
-    if (!accountId) {
-      const { getConfigValue } = await import('@/lib/database/supabase');
-      accountId = await getConfigValue('account_id', '');
-      console.log('📋 Supabase 계좌ID:', accountId ? '✅' : '❌');
-    }
+    accountId = cookies['kis_account_id'] || '';
+    console.log('🍪 쿠키에서 읽은 계좌ID:', accountId ? '✅ ' + accountId : '❌');
 
     if (!accountId) {
       return NextResponse.json(
