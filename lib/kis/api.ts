@@ -73,14 +73,30 @@ export class KISApi {
   async getToken(): Promise<string> {
     const now = Date.now() / 1000;
 
-    // 로컬 메모리 캐시 확인
+    // 1단계: 로컬 메모리 캐시 확인
     if (this.accessToken && now < this.tokenExpiry - 60) {
       console.log('✅ 로컬 메모리 캐시 토큰 사용');
       return this.accessToken;
     }
 
-    // Supabase에서 캐시된 토큰은 무시하고 항상 새 토큰 요청 (임시)
-    console.log('📝 새 토큰 요청 (Supabase 캐시 무시)');
+    // 2단계: Supabase에서 유효한 캐시 토큰 확인
+    try {
+      const cachedToken = await getConfigValue('kis_token', '');
+      const cachedExpiry = await getConfigValue('kis_token_expiry', '0');
+      const expiryTime = parseInt(cachedExpiry, 10);
+
+      if (cachedToken && expiryTime && now < expiryTime - 60) {
+        console.log('✅ Supabase 캐시 토큰 사용 (유효함)');
+        this.accessToken = cachedToken;
+        this.tokenExpiry = expiryTime;
+        return this.accessToken;
+      }
+    } catch (dbError) {
+      console.warn('⚠️ Supabase 캐시 조회 실패:', dbError);
+    }
+
+    // 3단계: 새 토큰 요청
+    console.log('📝 새 토큰 요청 (캐시 없거나 만료됨)');
 
     try {
       const response = await this.client.post<TokenResponse>('/oauth2/tokenP', {
@@ -92,7 +108,15 @@ export class KISApi {
       this.accessToken = response.data.access_token;
       this.tokenExpiry = now + (response.data.expires_in || 3600);
 
-      console.log('✅ 새 토큰 획득 (로컬 메모리만 저장)');
+      // Supabase에 저장 (다른 요청에서 재사용)
+      try {
+        await setConfigValue('kis_token', this.accessToken);
+        await setConfigValue('kis_token_expiry', this.tokenExpiry.toString());
+        console.log('💾 토큰을 Supabase에 저장 완료');
+      } catch (dbError) {
+        console.warn('⚠️ Supabase 저장 실패 (진행은 계속함):', dbError);
+      }
+
       return this.accessToken;
     } catch (error: any) {
       const errorCode = error?.response?.data?.error_code;
