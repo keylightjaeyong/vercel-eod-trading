@@ -68,7 +68,7 @@ export class KISApi {
     try {
       const cachedToken = await getConfigValue('kis_token', '');
       const cachedExpiry = await getConfigValue('kis_token_expiry', '0');
-      const expiryTime = parseInt(cachedExpiry, 10);
+      const expiryTime = parseInt(cachedExpiry || '0', 10);
 
       if (cachedToken && expiryTime && now < expiryTime - 60) {
         console.log('✅ Supabase에서 캐시된 토큰 사용');
@@ -106,7 +106,7 @@ export class KISApi {
       // Rate limit 에러면 캐시된 토큰 사용 시도
       if (error?.response?.data?.error_code === 'EGW00133') {
         try {
-          const cachedToken = await getConfigValue('kis_token', '');
+          const cachedToken = await getConfigValue('kis_token', '') || '';
           if (cachedToken) {
             console.warn('⚠️ Rate limit 감지, Supabase 캐시 토큰 재사용');
             this.accessToken = cachedToken;
