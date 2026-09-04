@@ -297,5 +297,14 @@ export class KISApi {
   }
 }
 
-// 싱글톤 인스턴스
-export const kisApi = new KISApi();
+// 싱글톤 인스턴스 (런타임에 환경변수 로드)
+let _kisApi: KISApi | null = null;
+
+export function getKisApi(): KISApi {
+  if (!_kisApi) {
+    _kisApi = new KISApi();
+  }
+  // 매번 환경변수 업데이트 (Vercel 지연 로드 대응)
+  _kisApi.updateEnv();
+  return _kisApi;
+}

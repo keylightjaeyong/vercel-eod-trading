@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { kisApi } from '@/lib/kis/api';
+import { getKisApi } from '@/lib/kis/api';
 import { telegramBot } from '@/lib/telegram/bot';
 
 /**
@@ -63,9 +63,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // kisApi에 환경변수 업데이트
-    (kisApi as any).updateEnv();
-    (kisApi as any).setAccountId(accountId);
+    // kisApi 인스턴스 가져오기 (매 요청마다 환경변수 업데이트)
+    const kisApi = getKisApi();
+    kisApi.setAccountId(accountId);
 
     const appKeyExists = !!process.env.KIS_APPKEY;
     const appSecretExists = !!process.env.KIS_SECRET;
