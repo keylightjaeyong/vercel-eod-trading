@@ -25,6 +25,16 @@ interface AccountData {
   profit_rate: number;
 }
 
+interface HoldingData {
+  symbol: string;
+  name: string;
+  quantity: number;
+  current_price: number;
+  evaluating: number;
+  profit_loss: number;
+  profit_rate: number;
+}
+
 export class KISApi {
   private baseUrl: string;
   private appKey: string;
@@ -227,6 +237,75 @@ export class KISApi {
       const status = error?.response?.status;
       const msg = error?.response?.data?.msg1 || error?.response?.statusText || error?.message;
       console.error(`❌ KIS API 에러: status=${status}, msg=${msg}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 보유종목 조회
+   * 공식 문서: 보유종목조회 API (TTTC8434R)
+   * 엔드포인트: /domestic-stock/v1/trading/inquire-holdings
+   */
+  async getHoldings(): Promise<HoldingData[]> {
+    try {
+      const headers = await this.getHeaders('TTTC8434R');
+
+      const cano = this.accountId.split('-')[0];
+      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+
+      console.log(`📝 보유종목 조회: CANO=${cano}, ACNT=${acntPrdtCd}`);
+
+      const response = await this.client.get(
+        '/domestic-stock/v1/trading/inquire-holdings',
+        {
+          headers,
+          params: {
+            CANO: cano,
+            ACNT_PRDT_CD: acntPrdtCd,
+            INQR_DVSN_1: '1',
+            INQR_DVSN_2: '0',
+            CTX_AREA_FK100: '',
+            CTX_AREA_NK100: '',
+          },
+        }
+      );
+
+      // HTML 리다이렉트 응답 확인 (권한 부족)
+      if (typeof response.data === 'string' && response.data.includes('refresh')) {
+        throw new Error('보유종목 조회 권한이 없습니다. KIS 개발자 포탈에서 권한을 활성화해주세요.');
+      }
+
+      // 응답 상태 확인
+      if (response.data.rt_cd !== '0') {
+        throw new Error(`보유종목 조회 실패: ${response.data.msg1}`);
+      }
+
+      const holdings: HoldingData[] = [];
+      const output = response.data.output || [];
+
+      for (const holding of output) {
+        holdings.push({
+          symbol: holding.pdno || '',
+          name: holding.prdt_name || '',
+          quantity: parseInt(holding.hldg_qty || '0', 10),
+          current_price: parseInt(holding.stck_prpr || '0', 10),
+          evaluating: parseInt(holding.evlu_amt || '0', 10),
+          profit_loss: parseInt(holding.evlu_pfls_amt || '0', 10),
+          profit_rate:
+            parseInt(holding.evlu_amt || '0', 10) > 0
+              ? (parseInt(holding.evlu_pfls_amt || '0', 10) /
+                  parseInt(holding.evlu_amt || '0', 10)) *
+                100
+              : 0,
+        });
+      }
+
+      console.log(`✅ 보유종목 조회 성공: ${holdings.length}개`);
+      return holdings;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const msg = error?.response?.data?.msg1 || error?.message;
+      console.error(`❌ 보유종목 조회 실패: status=${status}, msg=${msg}`);
       throw error;
     }
   }

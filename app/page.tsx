@@ -31,10 +31,21 @@ interface Exit {
   exit_time: string;
 }
 
+interface Holding {
+  symbol: string;
+  name: string;
+  quantity: number;
+  current_price: number;
+  evaluating: number;
+  profit_loss: number;
+  profit_rate: number;
+}
+
 export default function Dashboard() {
   const [account, setAccount] = useState<Account | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
   const [exits, setExits] = useState<Exit[]>([]);
+  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -151,7 +162,7 @@ export default function Dashboard() {
       }, {} as Record<string, string>);
       const accountId = cookies['kis_account_id'] || '';
 
-      // Vercel API Route에서 계좌 정보 조회
+      // 계좌 정보 조회
       const url = accountId
         ? `/api/account?account_id=${encodeURIComponent(accountId)}`
         : `/api/account`;
@@ -167,6 +178,24 @@ export default function Dashboard() {
         }
       } else {
         setError(`API error: ${accountRes.status}`);
+      }
+
+      // 보유종목 조회
+      try {
+        const holdingsRes = await fetch('/api/holdings');
+        if (holdingsRes.ok) {
+          const holdingsData = await holdingsRes.json();
+          if (holdingsData.success) {
+            setHoldings(holdingsData.data || []);
+          }
+        } else if (holdingsRes.status === 403) {
+          // 권한 부족은 무시하고 진행
+          console.log('보유종목 조회 권한 부족 (KIS 포탈에서 권한 활성화 필요)');
+          setHoldings([]);
+        }
+      } catch (err) {
+        console.warn('보유종목 조회 실패:', err);
+        setHoldings([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
@@ -189,7 +218,10 @@ export default function Dashboard() {
   };
 
   const avgPrice = calculateAvgPrice();
-  const totalQty = positions.reduce((sum, p) => sum + p.quantity, 0);
+  // 보유종목 정보가 있으면 사용, 없으면 positions에서 계산
+  const totalQty = holdings.length > 0
+    ? holdings.reduce((sum, h) => sum + h.quantity, 0)
+    : positions.reduce((sum, p) => sum + p.quantity, 0);
   const totalAmount = positions.reduce((sum, p) => sum + p.entry_amount, 0);
   const { profit: todayProfit, rate: todayRate } = calculateTodayProfit();
 
