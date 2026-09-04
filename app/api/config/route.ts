@@ -131,16 +131,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // 계좌ID 형식 검증 (예: 12345678-01)
-      if (!/^\d+-\d+$/.test(accountId)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: '계좌ID 형식이 잘못되었습니다. (예: 12345678-01)',
-          },
-          { status: 400 }
-        );
-      }
+      console.log('💾 계좌ID 저장 시작:', accountId);
 
       await setConfigValue('account_id', accountId);
 
