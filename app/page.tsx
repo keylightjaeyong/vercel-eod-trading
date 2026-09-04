@@ -143,11 +143,17 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const accountRes = await fetch('/api/account', {
-        headers: {
-          'X-Account-ID': localStorage.getItem('kis_account_id') || '',
-        }
-      });
+      // 쿠키에서 계좌ID 읽기
+      const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+        const [key, value] = cookie.trim().split('=');
+        acc[key] = decodeURIComponent(value);
+        return acc;
+      }, {} as Record<string, string>);
+      const accountId = cookies['kis_account_id'] || '';
+
+      // 계좌ID가 있으면 쿼리 파라미터로 전달
+      const url = accountId ? `/api/account?account_id=${encodeURIComponent(accountId)}` : '/api/account';
+      const accountRes = await fetch(url);
       if (accountRes.ok) {
         const accountData = await accountRes.json();
         setAccount(accountData.data);

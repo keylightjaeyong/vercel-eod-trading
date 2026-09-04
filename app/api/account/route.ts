@@ -30,19 +30,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 쿠키에서 계좌ID 읽기
-    const cookieString = request.headers.get('cookie') || '';
-    console.log('📋 쿠키 문자열:', cookieString);
+    // 쿼리 파라미터에서 계좌ID 읽기
+    const url = new URL(request.url);
+    let accountId = url.searchParams.get('account_id') || '';
+    console.log('📋 쿼리 파라미터 계좌ID:', accountId ? '✅ ' + accountId : '❌');
 
-    let accountId = '';
-    const cookies = cookieString.split(';').reduce((acc, cookie) => {
-      const [key, value] = cookie.trim().split('=');
-      acc[key] = value;
-      return acc;
-    }, {} as Record<string, string>);
+    // 쿼리 파라미터에 없으면 쿠키에서 읽기
+    if (!accountId) {
+      const cookieString = request.headers.get('cookie') || '';
+      console.log('📋 쿠키 문자열:', cookieString);
 
-    accountId = cookies['kis_account_id'] || '';
-    console.log('🍪 쿠키에서 읽은 계좌ID:', accountId ? '✅ ' + accountId : '❌');
+      const cookies = cookieString.split(';').reduce((acc, cookie) => {
+        const [key, value] = cookie.trim().split('=');
+        acc[key] = decodeURIComponent(value);
+        return acc;
+      }, {} as Record<string, string>);
+
+      accountId = cookies['kis_account_id'] || '';
+      console.log('🍪 쿠키에서 읽은 계좌ID:', accountId ? '✅ ' + accountId : '❌');
+    }
 
     if (!accountId) {
       return NextResponse.json(
