@@ -151,12 +151,22 @@ export default function Dashboard() {
       }, {} as Record<string, string>);
       const accountId = cookies['kis_account_id'] || '';
 
-      // 계좌ID가 있으면 쿼리 파라미터로 전달
-      const url = accountId ? `/api/account?account_id=${encodeURIComponent(accountId)}` : '/api/account';
+      // Python 백엔드에서 계좌 정보 조회
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const url = accountId
+        ? `${backendUrl}/api/account?account_id=${encodeURIComponent(accountId)}`
+        : `${backendUrl}/api/account`;
+
       const accountRes = await fetch(url);
       if (accountRes.ok) {
         const accountData = await accountRes.json();
-        setAccount(accountData.data);
+        if (accountData.success) {
+          setAccount(accountData.data);
+        } else {
+          setError(accountData.error || 'Failed to fetch account data');
+        }
+      } else {
+        setError(`Backend error: ${accountRes.status}`);
       }
       setError(null);
     } catch (err) {

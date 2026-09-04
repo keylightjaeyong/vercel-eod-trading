@@ -66,9 +66,9 @@ export class KISApi {
 
     // Supabase에서 캐시된 토큰 확인
     try {
-      const cachedToken = await getConfigValue('kis_token', '');
-      const cachedExpiry = await getConfigValue('kis_token_expiry', '0');
-      const expiryTime = parseInt(cachedExpiry || '0', 10);
+      const cachedToken = (await getConfigValue('kis_token', '')) || '';
+      const cachedExpiry = (await getConfigValue('kis_token_expiry', '0')) || '0';
+      const expiryTime = parseInt(cachedExpiry, 10);
 
       if (cachedToken && expiryTime && now < expiryTime - 60) {
         console.log('✅ Supabase에서 캐시된 토큰 사용');
@@ -106,7 +106,7 @@ export class KISApi {
       // Rate limit 에러면 캐시된 토큰 사용 시도
       if (error?.response?.data?.error_code === 'EGW00133') {
         try {
-          const cachedToken = await getConfigValue('kis_token', '') || '';
+          const cachedToken = (await getConfigValue('kis_token', '')) || '';
           if (cachedToken) {
             console.warn('⚠️ Rate limit 감지, Supabase 캐시 토큰 재사용');
             this.accessToken = cachedToken;
@@ -170,37 +170,43 @@ export class KISApi {
 
   /**
    * 계좌 정보 조회 (잔액, 평가액 등)
+   * 공식 문서: 투자계좌자산현황조회 API (CTRP6548R)
    */
   async getAccount(): Promise<AccountData> {
     try {
-      const headers = await this.getHeaders('TTTC8434R');
+      const headers = await this.getHeaders('CTRP6548R');
 
-      const response = await this.client.get('/uapi/domestic-stock/v1/trading/inquire-account', {
-        headers,
-        params: {
-          CANO: this.accountId.split('-')[0],
-          ACNT_PRDT_CD: this.accountId.split('-')[1] || '01',
-          INQR_DVSN_CD: '02',
-          UNPR_DVSN_CD: '01',
-          FUND_STTL_ICLD_YN_CD: 'N',
-          FNCG_AMT_AUTO_RDPT_YN_CD: 'N',
-          INQR_DVSN_CD2: '',
-          REPORT_CD: '',
-          CTX_AREA_FK100: '',
-          CTX_AREA_NK100: '',
-        },
-      });
+      const response = await this.client.get(
+        '/uapi/domestic-stock/v1/trading/inquire-account-balance',
+        {
+          headers,
+          params: {
+            CANO: this.accountId.split('-')[0],
+            ACNT_PRDT_CD: this.accountId.split('-')[1] || '01',
+            INQR_DVSN_1: '',
+            BSPR_BF_DT_APLY_YN: '',
+          },
+        }
+      );
 
-      const output = response.data.output1 || {};
-      const accounts = response.data.output2 || [];
-      const account = accounts[0] || {};
+      // 응답 상태 확인
+      if (response.data.rt_cd !== '0') {
+        throw new Error(`KIS API 에러: ${response.data.msg1}`);
+      }
+
+      const output2 = response.data.output2 || {};
 
       return {
         account_id: this.accountId,
-        balance: parseInt(account.dnca_tot_amt || '0', 10),
-        evaluating: parseInt(account.evaluate_amt || '0', 10),
-        profit_loss: parseInt(account.sell_buy_dsugt_chgs || '0', 10),
-        profit_rate: parseFloat(account.tot_evlu_pfls_rt || '0'),
+        balance: parseInt(output2.dncl_amt || '0', 10), // 예수금액 (현금)
+        evaluating: parseInt(output2.evlu_amt_smtl || '0', 10), // 평가금액합계
+        profit_loss: parseInt(output2.evlu_pfls_amt_smtl || '0', 10), // 평가손익금액합계
+        profit_rate:
+          parseInt(output2.evlu_amt_smtl || '0', 10) > 0
+            ? (parseInt(output2.evlu_pfls_amt_smtl || '0', 10) /
+                parseInt(output2.evlu_amt_smtl || '0', 10)) *
+              100
+            : 0,
       };
     } catch (error) {
       console.error('계좌 정보 조회 실패:', error);
