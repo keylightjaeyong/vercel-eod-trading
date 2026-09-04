@@ -54,6 +54,10 @@ export class KISApi {
     this.appSecret = process.env.KIS_SECRET || '';
     this.accountId = process.env.KIS_ACCOUNT || '';
     this.baseUrl = process.env.KIS_BASE_URL || 'https://openapi.koreainvestment.com:9443';
+
+    if (!this.appKey || !this.appSecret) {
+      console.warn(`⚠️ KIS 환경변수 부재: appKey=${!!this.appKey}, secret=${!!this.appSecret}`);
+    }
   }
 
   /**
