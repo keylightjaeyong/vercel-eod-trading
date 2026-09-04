@@ -118,6 +118,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 계좌ID 저장
+    if (body.action === 'set_account_id') {
+      const accountId = body.accountId?.trim();
+      if (!accountId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: '계좌ID는 필수입니다',
+          },
+          { status: 400 }
+        );
+      }
+
+      // 계좌ID 형식 검증 (예: 12345678-01)
+      if (!/^\d+-\d+$/.test(accountId)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: '계좌ID 형식이 잘못되었습니다. (예: 12345678-01)',
+          },
+          { status: 400 }
+        );
+      }
+
+      await setConfigValue('account_id', accountId);
+
+      const response = NextResponse.json(
+        {
+          success: true,
+          message: '계좌ID가 저장되었습니다',
+          data: { accountId }
+        },
+        { status: 200 }
+      );
+
+      // 쿠키에도 저장
+      response.cookies.set('kis_account_id', accountId, {
+        maxAge: 60 * 60 * 24 * 365,
+        path: '/',
+      });
+
+      return response;
+    }
+
     return NextResponse.json(
       {
         success: false,

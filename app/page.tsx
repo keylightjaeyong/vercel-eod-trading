@@ -43,6 +43,11 @@ export default function Dashboard() {
 
   const [toggling, setToggling] = useState(false);
 
+  // 계좌ID 입력 모달
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [accountInput, setAccountInput] = useState('');
+  const [savingAccount, setSavingAccount] = useState(false);
+
   useEffect(() => {
     fetchData();
     fetchTradingState();
@@ -77,6 +82,40 @@ export default function Dashboard() {
       setError('거래 상태 변경 중 오류 발생');
     } finally {
       setToggling(false);
+    }
+  };
+
+  const handleSaveAccountId = async () => {
+    if (!accountInput.trim()) {
+      setError('계좌ID를 입력하세요');
+      return;
+    }
+
+    setSavingAccount(true);
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'set_account_id',
+          accountId: accountInput.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        setShowAccountModal(false);
+        setAccountInput('');
+        setError(null);
+        // 계좌 정보 다시 로드
+        setTimeout(() => fetchData(), 1000);
+      } else {
+        const data = await res.json();
+        setError(data.error || '계좌ID 저장 실패');
+      }
+    } catch (err) {
+      setError('계좌ID 저장 중 오류 발생');
+    } finally {
+      setSavingAccount(false);
     }
   };
 
@@ -130,9 +169,58 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
       <div className="max-w-7xl mx-auto">
+        {/* 계좌ID 입력 모달 */}
+        {showAccountModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 border-2 border-blue-500 rounded-lg p-6 max-w-md w-full mx-4">
+              <h2 className="text-2xl font-bold text-white mb-4">🏦 계좌ID 설정</h2>
+              <p className="text-gray-400 mb-4">한투 계좌번호를 입력하세요 (예: 12345678-01)</p>
+
+              <input
+                type="text"
+                placeholder="12345678-01"
+                value={accountInput}
+                onChange={(e) => setAccountInput(e.target.value)}
+                className="w-full bg-slate-700 text-white px-4 py-3 rounded-lg mb-4 border border-slate-600 focus:border-blue-500 outline-none"
+                onKeyPress={(e) => e.key === 'Enter' && handleSaveAccountId()}
+              />
+
+              <p className="text-gray-500 text-sm mb-6">
+                📌 계좌번호-상품코드 형식으로 입력해주세요. 상품코드가 없으면 01을 입력하세요.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSaveAccountId}
+                  disabled={savingAccount}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-bold disabled:opacity-50"
+                >
+                  {savingAccount ? '저장 중...' : '💾 저장'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAccountModal(false);
+                    setAccountInput('');
+                  }}
+                  disabled={savingAccount}
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg font-bold"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-4xl font-bold text-white">📊 EOD Trading Dashboard</h1>
           <div className="flex gap-3">
+            <button
+              onClick={() => setShowAccountModal(true)}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition"
+            >
+              🏦 계좌설정
+            </button>
             <Link href="/config" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
               ⚙️ 설정
             </Link>

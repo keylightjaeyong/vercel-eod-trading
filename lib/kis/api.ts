@@ -28,6 +28,7 @@ export class KISApi {
   private baseUrl: string;
   private appKey: string;
   private appSecret: string;
+  private accountId: string = '';
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
   private client: AxiosInstance;
@@ -36,11 +37,19 @@ export class KISApi {
     this.baseUrl = process.env.KIS_BASE_URL || 'https://openapi.koreainvestment.com:9443';
     this.appKey = process.env.KIS_APPKEY || '';
     this.appSecret = process.env.KIS_SECRET || '';
+    this.accountId = process.env.KIS_ACCOUNT || '';
 
     this.client = axios.create({
       baseURL: this.baseUrl,
       timeout: 8000,
     });
+  }
+
+  /**
+   * 계좌ID 설정
+   */
+  setAccountId(accountId: string) {
+    this.accountId = accountId;
   }
 
   /**
@@ -133,13 +142,12 @@ export class KISApi {
   async getAccount(): Promise<AccountData> {
     try {
       const headers = await this.getHeaders('TTTC8434R');
-      const accountId = process.env.KIS_ACCOUNT || '';
 
       const response = await this.client.get('/uapi/domestic-stock/v1/trading/inquire-account', {
         headers,
         params: {
-          CANO: accountId.split('-')[0],
-          ACNT_PRDT_CD: accountId.split('-')[1] || '01',
+          CANO: this.accountId.split('-')[0],
+          ACNT_PRDT_CD: this.accountId.split('-')[1] || '01',
           INQR_DVSN_CD: '02',
           UNPR_DVSN_CD: '01',
           FUND_STTL_ICLD_YN_CD: 'N',
@@ -156,7 +164,7 @@ export class KISApi {
       const account = accounts[0] || {};
 
       return {
-        account_id: accountId,
+        account_id: this.accountId,
         balance: parseInt(account.dnca_tot_amt || '0', 10),
         evaluating: parseInt(account.evaluate_amt || '0', 10),
         profit_loss: parseInt(account.sell_buy_dsugt_chgs || '0', 10),

@@ -30,6 +30,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // 쿠키에서 계좌ID 읽기
+    const accountId = request.cookies.get('kis_account_id')?.value;
+    console.log('🍪 계좌ID 쿠키:', accountId ? '✅' : '❌ (설정 필요)');
+
+    if (!accountId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '❌ 계좌ID가 설정되지 않았습니다. 대시보드의 "계좌설정" 버튼에서 계좌ID를 입력하세요.',
+          details: {
+            accountId: false
+          }
+        },
+        { status: 400 }
+      );
+    }
+
+    // kisApi에 계좌ID 설정
+    (kisApi as any).setAccountId(accountId);
+
     const account = await kisApi.getAccount();
 
     return NextResponse.json(
