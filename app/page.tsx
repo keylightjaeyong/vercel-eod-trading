@@ -151,24 +151,23 @@ export default function Dashboard() {
       }, {} as Record<string, string>);
       const accountId = cookies['kis_account_id'] || '';
 
-      // Python 백엔드에서 계좌 정보 조회
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      // Vercel API Route에서 계좌 정보 조회
       const url = accountId
-        ? `${backendUrl}/api/account?account_id=${encodeURIComponent(accountId)}`
-        : `${backendUrl}/api/account`;
+        ? `/api/account?account_id=${encodeURIComponent(accountId)}`
+        : `/api/account`;
 
       const accountRes = await fetch(url);
       if (accountRes.ok) {
         const accountData = await accountRes.json();
         if (accountData.success) {
           setAccount(accountData.data);
+          setError(null);
         } else {
           setError(accountData.error || 'Failed to fetch account data');
         }
       } else {
-        setError(`Backend error: ${accountRes.status}`);
+        setError(`API error: ${accountRes.status}`);
       }
-      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
