@@ -135,13 +135,11 @@ export class KISApi {
 
     const headers = {
       'content-type': 'application/json; charset=utf-8',
-      authorization: token,
+      authorization: `Bearer ${token}`,
       appkey: this.appKey,
       appsecret: this.appSecret,
       tr_id: trId,
     };
-
-    console.log(`📨 요청 헤더 (${trId}): authorization 길이=${headers.authorization.length}, 첫 50자=${headers.authorization.substring(0, 50)}`);
 
     return headers;
   }
