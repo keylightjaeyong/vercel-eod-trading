@@ -171,12 +171,8 @@ export default function Dashboard() {
 
         {error && <div className="bg-red-500 text-white p-4 rounded-lg mb-6">{error}</div>}
 
-        {loading ? (
-          <div className="text-center text-gray-400"><p>📡 데이터 로딩 중...</p></div>
-        ) : (
-          <>
-            {/* 계좌정보 요약 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        {/* 계좌정보 요약 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
               <div className="bg-gradient-to-br from-blue-900 to-blue-800 border-2 border-blue-600 rounded-lg p-6">
                 <p className="text-blue-200 text-sm mb-1">💰 잔고</p>
                 <p className="text-4xl font-bold text-white">{account ? (account.balance / 1_000_000).toFixed(2) : '-'}M</p>
@@ -189,6 +185,10 @@ export default function Dashboard() {
               </div>
             </div>
 
+        {loading ? (
+          <div className="text-center text-gray-400 mb-8"><p>📡 데이터 로딩 중...</p></div>
+        ) : (
+          <>
             {account && (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
