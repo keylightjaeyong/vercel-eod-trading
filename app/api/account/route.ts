@@ -30,9 +30,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 쿠키에서 계좌ID 읽기
-    const accountId = request.cookies.get('kis_account_id')?.value;
-    console.log('🍪 계좌ID 쿠키:', accountId ? '✅' : '❌ (설정 필요)');
+    // Supabase에서 계좌ID 읽기
+    const { getConfigValue } = await import('@/lib/database/supabase');
+    const accountId = await getConfigValue('account_id', '');
+    console.log('📋 Supabase 계좌ID:', accountId ? '✅' : '❌ (설정 필요)');
 
     if (!accountId) {
       return NextResponse.json(
