@@ -92,34 +92,14 @@ export class KISApi {
       this.accessToken = response.data.access_token;
       this.tokenExpiry = now + (response.data.expires_in || 3600);
 
-      // Supabase에 토큰 캐시
-      try {
-        await setConfigValue('kis_token', this.accessToken);
-        await setConfigValue('kis_token_expiry', this.tokenExpiry.toString());
-        console.log('💾 토큰을 Supabase에 캐싱');
-      } catch (dbError) {
-        console.warn('⚠️ Supabase 캐싱 실패:', dbError);
-      }
-
+      console.log('✅ 새 토큰 획득 (로컬 메모리만 저장)');
       return this.accessToken;
     } catch (error: any) {
-      console.error('토큰 갱신 실패:', error?.response?.data || error?.message);
+      const errorCode = error?.response?.data?.error_code;
+      const errorMsg = error?.response?.data?.error_description || error?.message;
+      console.error(`❌ 토큰 갱신 실패 (${errorCode}): ${errorMsg}`);
 
-      // Rate limit 에러면 캐시된 토큰 사용 시도
-      if (error?.response?.data?.error_code === 'EGW00133') {
-        try {
-          const cachedToken = await getConfigValue('kis_token', '');
-          if (cachedToken) {
-            console.warn('⚠️ Rate limit 감지, Supabase 캐시 토큰 재사용');
-            this.accessToken = cachedToken;
-            return this.accessToken;
-          }
-        } catch (e) {
-          console.warn('⚠️ 캐시된 토큰 조회 실패');
-        }
-      }
-
-      throw new Error('KIS API 인증 실패');
+      throw new Error(`KIS API 인증 실패: ${errorMsg}`);
     }
   }
 
