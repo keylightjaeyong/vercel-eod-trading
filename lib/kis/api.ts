@@ -75,24 +75,12 @@ export class KISApi {
 
     // 로컬 메모리 캐시 확인
     if (this.accessToken && now < this.tokenExpiry - 60) {
+      console.log('✅ 로컬 메모리 캐시 토큰 사용');
       return this.accessToken;
     }
 
-    // Supabase에서 캐시된 토큰 확인
-    try {
-      const cachedToken = await getConfigValue('kis_token', '');
-      const cachedExpiry = await getConfigValue('kis_token_expiry', '0');
-      const expiryTime = parseInt(cachedExpiry, 10);
-
-      if (cachedToken && expiryTime && now < expiryTime - 60) {
-        console.log('✅ Supabase에서 캐시된 토큰 사용');
-        this.accessToken = cachedToken;
-        this.tokenExpiry = expiryTime;
-        return this.accessToken;
-      }
-    } catch (dbError) {
-      console.warn('⚠️ Supabase 캐시 조회 실패:', dbError);
-    }
+    // Supabase에서 캐시된 토큰은 무시하고 항상 새 토큰 요청 (임시)
+    console.log('📝 새 토큰 요청 (Supabase 캐시 무시)');
 
     try {
       const response = await this.client.post<TokenResponse>('/oauth2/tokenP', {
@@ -141,13 +129,17 @@ export class KISApi {
   private async getHeaders(trId: string): Promise<Record<string, string>> {
     const token = await this.getToken();
 
-    return {
+    const headers = {
       'content-type': 'application/json; charset=utf-8',
       authorization: token,
       appkey: this.appKey,
       appsecret: this.appSecret,
       tr_id: trId,
     };
+
+    console.log(`📨 요청 헤더 (${trId}): authorization 길이=${headers.authorization.length}, 첫 50자=${headers.authorization.substring(0, 50)}`);
+
+    return headers;
   }
 
   /**
