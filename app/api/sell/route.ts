@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
-import { kisApi } from '@/lib/kis/api';
+import { getKisApi } from '@/lib/kis/api';
 import { telegramBot } from '@/lib/telegram/bot';
 import { configStore } from '@/lib/database/config';
 
@@ -99,7 +99,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     for (const position of positions) {
       try {
         // 현재가 조회
-        const quote = await kisApi.getPrice(position.stock, 'KOSPI');
+        const kapi = getKisApi();
+        const quote = await kapi.getPrice(position.stock, 'KOSPI');
 
         // 평단가 계산 (모든 포지션의 가중평균)
         const avgPrice = calculateAvgPrice(positions);
@@ -139,7 +140,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             .reduce((sum, p) => sum + p.quantity, 0);
 
           // KIS API로 매도 주문
-          const order = await kisApi.sell(position.stock, totalQuantity);
+          const order = await kapi.sell(position.stock, totalQuantity);
 
           // 매도 기록
           const exit: Exit = {

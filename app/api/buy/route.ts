@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
-import { kisApi } from '@/lib/kis/api';
+import { getKisApi } from '@/lib/kis/api';
 import { telegramBot } from '@/lib/telegram/bot';
 import { configStore } from '@/lib/database/config';
 
@@ -86,6 +86,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       if (positions.length > 0) {
         const lastEntry = positions[positions.length - 1];
+        const kisApi = getKisApi();
         const currentPrice = await kisApi.getPrice(lastEntry.stock, 'NX');
 
         const priceChange = (currentPrice.current - lastEntry.entry_price) / lastEntry.entry_price;
@@ -106,6 +107,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     // 계좌 잔액 확인
+    const kisApi = getKisApi();
     const account = await kisApi.getAccount();
     const availableBalance = account.balance;
 
@@ -144,7 +146,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       try {
         // 매수 수량 계산
         const buyAmount = Math.floor(availableBalance * currentPhase.ratio);
-        const quote = await kisApi.getPrice(stock.code, currentPhase.market);
+        const kapi = getKisApi();
+        const quote = await kapi.getPrice(stock.code, currentPhase.market);
 
         if (quote.ask <= 0 || buyAmount < quote.ask * currentPhase.min_qty) {
           console.warn(
@@ -163,7 +166,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         }
 
         // KIS API로 매수 주문
-        const order = await kisApi.buy(stock.code, quantity);
+        const order = await kapi.buy(stock.code, quantity);
 
         // 포지션 기록
         const position: Position = {
