@@ -1,4 +1,9 @@
 {
+  "env": {
+    "KIS_APPKEY": "PSr98AVMkGMly9EOddUUvU76l2TUbPus7GMn",
+    "KIS_SECRET": "+LRQbU/oBwFSaD3BdPXfpfaPAgL0V3JjRkokVvhELgEvFo4oXr5hH6yEwXrsG+iA7ay9wksgAn12nAtnRyS8xguE3y8Jvs9FYfYVPZUX5yRIupPbxW0GAo1QKaeuE3VwJnqeB0uMR+QVi14KZg1FCLPz22EUb86pPoYxDQ8LUqytnoYz0ho=",
+    "KIS_BASE_URL": "https://openapi.koreainvestment.com:9443"
+  },
   "crons": [
     {
       "path": "/api/market-signal",
