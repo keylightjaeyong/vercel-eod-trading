@@ -19,6 +19,7 @@ interface Account {
   profit_loss: number;
   profit_rate: number;
   total_assets: number;
+  holding_qty: number;
 }
 
 interface Exit {
@@ -218,10 +219,8 @@ export default function Dashboard() {
   };
 
   const avgPrice = calculateAvgPrice();
-  // 보유종목 정보가 있으면 사용, 없으면 positions에서 계산
-  const totalQty = holdings.length > 0
-    ? holdings.reduce((sum, h) => sum + h.quantity, 0)
-    : positions.reduce((sum, p) => sum + p.quantity, 0);
+  // KIS API에서 직접 조회한 보유수량 사용
+  const totalQty = account?.holding_qty ?? 0;
   const totalAmount = positions.reduce((sum, p) => sum + p.entry_amount, 0);
   const { profit: todayProfit, rate: todayRate } = calculateTodayProfit();
 

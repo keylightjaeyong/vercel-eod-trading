@@ -23,6 +23,7 @@ interface AccountData {
   evaluating: number;
   profit_loss: number;
   profit_rate: number;
+  holding_qty: number;
 }
 
 interface HoldingData {
@@ -232,6 +233,7 @@ export class KISApi {
                 parseInt(output2.evlu_amt_smtl || '0', 10)) *
               100
             : 0,
+        holding_qty: parseInt(output2.hldg_qty || '0', 10), // 보유수량
       };
     } catch (error: any) {
       const status = error?.response?.status;
