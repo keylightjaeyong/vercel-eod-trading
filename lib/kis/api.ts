@@ -47,6 +47,16 @@ export class KISApi {
   }
 
   /**
+   * 런타임에 환경변수 업데이트 (지연 초기화)
+   */
+  updateEnv() {
+    this.appKey = process.env.KIS_APPKEY || '';
+    this.appSecret = process.env.KIS_SECRET || '';
+    this.accountId = process.env.KIS_ACCOUNT || '';
+    this.baseUrl = process.env.KIS_BASE_URL || 'https://openapi.koreainvestment.com:9443';
+  }
+
+  /**
    * 계좌ID 설정
    */
   setAccountId(accountId: string) {
@@ -176,18 +186,25 @@ export class KISApi {
     try {
       const headers = await this.getHeaders('CTRP6548R');
 
+      const cano = this.accountId.split('-')[0];
+      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+
+      console.log(`📝 KIS 요청: CANO=${cano}, ACNT=${acntPrdtCd}, AUTH=${headers.authorization ? 'YES' : 'NO'}, APPKEY=${headers.appkey ? 'YES' : 'NO'}`);
+
       const response = await this.client.get(
         '/uapi/domestic-stock/v1/trading/inquire-account-balance',
         {
           headers,
           params: {
-            CANO: this.accountId.split('-')[0],
-            ACNT_PRDT_CD: this.accountId.split('-')[1] || '01',
+            CANO: cano,
+            ACNT_PRDT_CD: acntPrdtCd,
             INQR_DVSN_1: '',
             BSPR_BF_DT_APLY_YN: '',
           },
         }
       );
+
+      console.log(`✅ KIS 응답: status=${response.status}, rt_cd=${response.data.rt_cd}, msg=${response.data.msg1}`);
 
       // 응답 상태 확인
       if (response.data.rt_cd !== '0') {
@@ -208,8 +225,10 @@ export class KISApi {
               100
             : 0,
       };
-    } catch (error) {
-      console.error('계좌 정보 조회 실패:', error);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const msg = error?.response?.data?.msg1 || error?.response?.statusText || error?.message;
+      console.error(`❌ KIS API 에러: status=${status}, msg=${msg}`);
       throw error;
     }
   }

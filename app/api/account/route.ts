@@ -63,8 +63,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // kisApi에 계좌ID 설정
+    // kisApi에 환경변수 업데이트
+    (kisApi as any).updateEnv();
     (kisApi as any).setAccountId(accountId);
+
+    const appKeyExists = !!process.env.KIS_APPKEY;
+    const appSecretExists = !!process.env.KIS_SECRET;
+    const actualAppKey = !!(kisApi as any).appKey;
+    const actualSecret = !!(kisApi as any).appSecret;
+
+    console.log(`🔑 환경변수: appKey=${appKeyExists}, secret=${appSecretExists}, 실제=${actualAppKey}/${actualSecret}`);
 
     const account = await kisApi.getAccount();
 
