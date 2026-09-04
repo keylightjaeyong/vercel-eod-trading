@@ -30,10 +30,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Supabase에서 계좌ID 읽기
-    const { getConfigValue } = await import('@/lib/database/supabase');
-    const accountId = await getConfigValue('account_id', '');
-    console.log('📋 Supabase 계좌ID:', accountId ? '✅' : '❌ (설정 필요)');
+    // 쿠키에서 계좌ID 읽기
+    let accountId = request.cookies.get('kis_account_id')?.value || '';
+    console.log('🍪 쿠키 계좌ID:', accountId ? '✅' : '❌');
+
+    // 쿠키에 없으면 Supabase에서 읽기
+    if (!accountId) {
+      const { getConfigValue } = await import('@/lib/database/supabase');
+      accountId = await getConfigValue('account_id', '');
+      console.log('📋 Supabase 계좌ID:', accountId ? '✅' : '❌');
+    }
 
     if (!accountId) {
       return NextResponse.json(
