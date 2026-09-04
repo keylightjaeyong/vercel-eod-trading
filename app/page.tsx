@@ -175,6 +175,22 @@ export default function Dashboard() {
           <div className="text-center text-gray-400"><p>📡 데이터 로딩 중...</p></div>
         ) : (
           <>
+            {/* 계좌정보 요약 */}
+            {account && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                <div className="bg-gradient-to-br from-blue-900 to-blue-800 border-2 border-blue-600 rounded-lg p-6">
+                  <p className="text-blue-200 text-sm mb-1">💰 잔고</p>
+                  <p className="text-4xl font-bold text-white">{(account.balance / 1_000_000).toFixed(2)}M</p>
+                  <p className="text-blue-300 text-xs mt-1">현금 보유액</p>
+                </div>
+                <div className="bg-gradient-to-br from-purple-900 to-purple-800 border-2 border-purple-600 rounded-lg p-6">
+                  <p className="text-purple-200 text-sm mb-1">📊 보유 주식수</p>
+                  <p className="text-4xl font-bold text-white">{totalQty.toLocaleString()}주</p>
+                  <p className="text-purple-300 text-xs mt-1">현재 포지션</p>
+                </div>
+              </div>
+            )}
+
             {account && (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
