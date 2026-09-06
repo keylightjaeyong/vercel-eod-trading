@@ -155,48 +155,48 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // 쿠키에서 계좌ID 읽기
-      const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-        const [key, value] = cookie.trim().split('=');
-        acc[key] = decodeURIComponent(value);
-        return acc;
-      }, {} as Record<string, string>);
-      const accountId = cookies['kis_account_id'] || '';
 
-      // 계좌 정보 조회
-      const url = accountId
-        ? `/api/account?account_id=${encodeURIComponent(accountId)}`
-        : `/api/account`;
+      // 주식잔고조회 (/api/balance) - 보유종목 + 계좌요약
+      const balanceRes = await fetch('/api/balance');
+      if (balanceRes.ok) {
+        const balanceData = await balanceRes.json();
+        if (balanceData.success) {
+          const data = balanceData.data;
 
-      const accountRes = await fetch(url);
-      if (accountRes.ok) {
-        const accountData = await accountRes.json();
-        if (accountData.success) {
-          setAccount(accountData.data);
+          // Account 객체로 변환
+          setAccount({
+            account_id: data.account_id,
+            balance: data.dnca_tot_amt,
+            evaluating: data.evlu_amt_smtl,
+            profit_loss: data.evlu_pfls_amt_smtl,
+            profit_rate: data.evlu_amt_smtl > 0
+              ? (data.evlu_pfls_amt_smtl / data.evlu_amt_smtl) * 100
+              : 0,
+            total_assets: data.tot_asst_amt,
+            holding_qty: data.holdings?.reduce((sum: number, h: any) => sum + h.hldg_qty, 0) || 0
+          });
+
+          // Holdings 배열로 변환
+          if (data.holdings && Array.isArray(data.holdings)) {
+            setHoldings(
+              data.holdings.map((h: any) => ({
+                symbol: h.pdno,
+                name: h.prdt_name,
+                quantity: h.hldg_qty,
+                current_price: h.prpr,
+                evaluating: h.evlu_amt,
+                profit_loss: h.evlu_pfls_amt,
+                profit_rate: h.evlu_amt > 0 ? (h.evlu_pfls_amt / h.evlu_amt) * 100 : 0
+              }))
+            );
+          }
+
           setError(null);
         } else {
-          setError(accountData.error || 'Failed to fetch account data');
+          setError(balanceData.error || 'Failed to fetch balance data');
         }
       } else {
-        setError(`API error: ${accountRes.status}`);
-      }
-
-      // 보유종목 조회
-      try {
-        const holdingsRes = await fetch('/api/holdings');
-        if (holdingsRes.ok) {
-          const holdingsData = await holdingsRes.json();
-          if (holdingsData.success) {
-            setHoldings(holdingsData.data || []);
-          }
-        } else if (holdingsRes.status === 403) {
-          // 권한 부족은 무시하고 진행
-          console.log('보유종목 조회 권한 부족 (KIS 포탈에서 권한 활성화 필요)');
-          setHoldings([]);
-        }
-      } catch (err) {
-        console.warn('보유종목 조회 실패:', err);
-        setHoldings([]);
+        setError(`Balance API error: ${balanceRes.status}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
