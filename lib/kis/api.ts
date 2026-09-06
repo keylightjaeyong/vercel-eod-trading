@@ -36,6 +36,26 @@ interface HoldingData {
   profit_rate: number;
 }
 
+interface BalanceHolding {
+  pdno: string;
+  prdt_name: string;
+  hldg_qty: number;
+  pchs_avg_pric: number;
+  prpr: number;
+  evlu_amt: number;
+  evlu_pfls_amt: number;
+  evlu_pfls_rt: number;
+}
+
+interface BalanceData {
+  account_id: string;
+  holdings: BalanceHolding[];
+  dnca_tot_amt: number;
+  evlu_amt_smtl: number;
+  evlu_pfls_amt_smtl: number;
+  tot_asst_amt: number;
+}
+
 export class KISApi {
   private baseUrl: string;
   private appKey: string;
@@ -244,7 +264,76 @@ export class KISApi {
   }
 
   /**
-   * 보유종목 조회
+   * 주식잔고조회 (보유종목 + 계좌요약)
+   * 공식 API: v1_국내주식-006
+   * TR_ID: TTTC8434R (실전), VTTC8434R (모의)
+   * 엔드포인트: /uapi/domestic-stock/v1/trading/inquire-balance
+   */
+  async getBalance(): Promise<BalanceData> {
+    try {
+      const headers = await this.getHeaders('TTTC8434R');
+
+      const cano = this.accountId.split('-')[0];
+      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+
+      console.log(`📝 주식잔고조회: CANO=${cano}, ACNT=${acntPrdtCd}`);
+
+      const response = await this.client.get(
+        '/uapi/domestic-stock/v1/trading/inquire-balance',
+        {
+          headers,
+          params: {
+            CANO: cano,
+            ACNT_PRDT_CD: acntPrdtCd,
+            INQR_DVSN_1: '1',
+            INQR_DVSN_2: '0',
+            CTX_AREA_FK100: '',
+            CTX_AREA_NK100: '',
+          },
+        }
+      );
+
+      // 응답 상태 확인
+      if (response.data.rt_cd !== '0') {
+        throw new Error(`주식잔고조회 실패: ${response.data.msg1}`);
+      }
+
+      // output1: 보유종목 배열 파싱
+      const output1 = response.data.output1 || [];
+      const holdings: BalanceHolding[] = output1.map((item: any) => ({
+        pdno: item.pdno || '',
+        prdt_name: item.prdt_name || '',
+        hldg_qty: parseInt(item.hldg_qty || '0', 10),
+        pchs_avg_pric: parseInt(item.pchs_avg_pric || '0', 10),
+        prpr: parseInt(item.prpr || '0', 10),
+        evlu_amt: parseInt(item.evlu_amt || '0', 10),
+        evlu_pfls_amt: parseInt(item.evlu_pfls_amt || '0', 10),
+        evlu_pfls_rt: parseFloat(item.evlu_pfls_rt || '0'),
+      }));
+
+      // output2: 계좌 요약정보 파싱
+      const output2 = response.data.output2 || {};
+
+      console.log(`✅ 주식잔고조회 성공: ${holdings.length}개 종목`);
+
+      return {
+        account_id: this.accountId,
+        holdings,
+        dnca_tot_amt: parseInt(output2.dnca_tot_amt || '0', 10),
+        evlu_amt_smtl: parseInt(output2.evlu_amt_smtl || '0', 10),
+        evlu_pfls_amt_smtl: parseInt(output2.evlu_pfls_amt_smtl || '0', 10),
+        tot_asst_amt: parseInt(output2.tot_asst_amt || '0', 10),
+      };
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const msg = error?.response?.data?.msg1 || error?.message;
+      console.error(`❌ 주식잔고조회 실패: status=${status}, msg=${msg}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 보유종목 조회 (구버전 - inquire-holdings)
    * 공식 문서: 보유종목조회 API (TTTC8434R)
    * 엔드포인트: /domestic-stock/v1/trading/inquire-holdings
    */
