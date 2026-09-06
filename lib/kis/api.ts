@@ -311,18 +311,19 @@ export class KISApi {
         evlu_pfls_rt: parseFloat(item.evlu_pfls_rt || '0'),
       }));
 
-      // output2: 계좌 요약정보 파싱
-      const output2 = response.data.output2 || {};
+      // output2: 계좌 요약정보 파싱 (배열의 첫 요소)
+      const output2Array = response.data.output2 || [];
+      const output2 = Array.isArray(output2Array) ? output2Array[0] : output2Array;
 
       console.log(`✅ 주식잔고조회 성공: ${holdings.length}개 종목`);
 
       return {
         account_id: this.accountId,
         holdings,
-        dnca_tot_amt: parseInt(output2.dnca_tot_amt || '0', 10),
-        evlu_amt_smtl: parseInt(output2.evlu_amt_smtl || '0', 10),
-        evlu_pfls_amt_smtl: parseInt(output2.evlu_pfls_amt_smtl || '0', 10),
-        tot_asst_amt: parseInt(output2.tot_asst_amt || '0', 10),
+        dnca_tot_amt: parseInt(output2?.dnca_tot_amt || '0', 10), // 예수금
+        evlu_amt_smtl: parseInt(output2?.scts_evlu_amt || '0', 10), // 유가증권 평가금액
+        evlu_pfls_amt_smtl: parseInt(output2?.evlu_pfls_smtl_amt || '0', 10), // 평가손익합계
+        tot_asst_amt: parseInt(output2?.tot_evlu_amt || '0', 10), // 총평가금액
       };
     } catch (error: any) {
       const status = error?.response?.status;
