@@ -7,16 +7,30 @@ export async function GET(request: NextRequest) {
   try {
     const path = request.nextUrl.pathname.replace('/api/fulltime', '');
     const queryString = request.nextUrl.search;
+    const url = `${HEROKU_BACKEND_URL}/api/fulltime${path}${queryString}`;
 
-    const response = await fetch(
-      `${HEROKU_BACKEND_URL}/api/fulltime${path}${queryString}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
+    console.log('🔗 Heroku URL:', url);
+    console.log('📌 HEROKU_BACKEND_URL:', HEROKU_BACKEND_URL);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`❌ Heroku 응답 에러: ${response.status}`);
+      const text = await response.text();
+      return NextResponse.json(
+        {
+          status: 'error',
+          error: `Heroku error: ${response.status}`,
+          details: text,
         },
-      }
-    );
+        { status: response.status }
+      );
+    }
 
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
@@ -26,6 +40,7 @@ export async function GET(request: NextRequest) {
       {
         status: 'error',
         error: '백엔드 서버에 연결할 수 없습니다',
+        details: String(error),
       },
       { status: 500 }
     );
