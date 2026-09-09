@@ -14,6 +14,7 @@ interface GlobalSettings {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
+  const [accountId, setAccountId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -21,7 +22,30 @@ export default function SettingsPage() {
   // 설정 조회
   useEffect(() => {
     fetchSettings();
+    loadAccountId();
   }, []);
+
+  const loadAccountId = () => {
+    const stored = localStorage.getItem('kis_account_id');
+    if (stored) {
+      setAccountId(stored);
+    }
+  };
+
+  const saveAccountId = () => {
+    if (!accountId.trim()) {
+      setError('계좌ID를 입력하세요');
+      return;
+    }
+    try {
+      localStorage.setItem('kis_account_id', accountId);
+      document.cookie = `kis_account_id=${encodeURIComponent(accountId)}; path=/; max-age=31536000`;
+      setError(null);
+      alert('✅ 계좌ID가 저장되었습니다');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '저장 실패');
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -119,6 +143,31 @@ export default function SettingsPage() {
           ❌ {error}
         </div>
       )}
+
+      {/* 계좌ID 설정 */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-8">
+        <h2 className="text-xl font-semibold mb-4">🏦 계좌 설정</h2>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            placeholder="예: 44291220-01"
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            className="flex-1 bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white"
+          />
+          <button
+            onClick={saveAccountId}
+            className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-semibold transition-colors"
+          >
+            💾 계좌 저장
+          </button>
+        </div>
+        {accountId && (
+          <p className="text-sm text-gray-400 mt-2">
+            ✅ 저장된 계좌: <span className="text-blue-400 font-mono">{accountId}</span>
+          </p>
+        )}
+      </div>
 
       {/* TEST_MODE 토글 */}
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-8">
