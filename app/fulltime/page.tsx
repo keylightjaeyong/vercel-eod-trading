@@ -27,7 +27,12 @@ export default function FulltimeDashboard() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const response = await fetch('/api/fulltime/status');
+        const accountId = localStorage.getItem('kis_account_id') || '';
+        const url = accountId
+          ? `/api/fulltime/status?account_id=${accountId}`
+          : '/api/fulltime/status';
+
+        const response = await fetch(url);
         if (!response.ok) throw new Error('상태 조회 실패');
         const data = await response.json();
         setStatus(data.data);
