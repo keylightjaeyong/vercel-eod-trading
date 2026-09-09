@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const HEROKU_BACKEND_URL = process.env.HEROKU_BACKEND_URL || 'http://localhost:5000';
 
-export async function GET(request: NextRequest, { params }: { params: { slug: string[] } }) {
+export async function GET(request: NextRequest, { params }: any) {
   try {
-    const slugPath = params.slug.join('/');
+    const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
+    const slugPath = slug.join('/');
     const queryString = request.nextUrl.search;
     const url = `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}${queryString}`;
 
@@ -30,9 +31,10 @@ export async function GET(request: NextRequest, { params }: { params: { slug: st
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { slug: string[] } }) {
+export async function POST(request: NextRequest, { params }: any) {
   try {
-    const slugPath = params.slug.join('/');
+    const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
+    const slugPath = slug.join('/');
     const body = await request.json();
     const url = `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}`;
 
@@ -55,9 +57,10 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { slug: string[] } }) {
+export async function PUT(request: NextRequest, { params }: any) {
   try {
-    const slugPath = params.slug.join('/');
+    const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
+    const slugPath = slug.join('/');
     const body = await request.json();
     const url = `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}`;
 
@@ -80,9 +83,10 @@ export async function PUT(request: NextRequest, { params }: { params: { slug: st
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { slug: string[] } }) {
+export async function DELETE(request: NextRequest, { params }: any) {
   try {
-    const slugPath = params.slug.join('/');
+    const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
+    const slugPath = slug.join('/');
     const url = `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}`;
 
     const response = await fetch(url, {
