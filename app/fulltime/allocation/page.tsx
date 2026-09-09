@@ -108,12 +108,9 @@ export default function AllocationPage() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm text-gray-400 mb-2">자본금 (원)</label>
-            <input
-              type="number"
-              value={totalCapital}
-              disabled
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white opacity-75 cursor-not-allowed"
-            />
+            <div className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white font-mono text-lg">
+              {totalCapital.toLocaleString()}
+            </div>
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-2">포맷된 금액</label>
