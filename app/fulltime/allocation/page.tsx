@@ -29,7 +29,12 @@ export default function AllocationPage() {
 
   const fetchAllocation = async () => {
     try {
-      const response = await fetch('/api/fulltime/allocation');
+      const accountId = localStorage.getItem('kis_account_id') || '';
+      const url = accountId
+        ? `/api/fulltime/allocation?account_id=${accountId}`
+        : '/api/fulltime/allocation';
+
+      const response = await fetch(url);
       if (!response.ok) throw new Error('할당 조회 실패');
       const data = await response.json();
       setAllocation(data.data);
@@ -53,12 +58,15 @@ export default function AllocationPage() {
   const handleSaveAllocation = async () => {
     setSaving(true);
     try {
+      const accountId = localStorage.getItem('kis_account_id') || '';
+
       const response = await fetch('/api/fulltime/allocation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           total_capital: totalCapital,
           allocations: allocations,
+          account_id: accountId,
         }),
       });
 
@@ -96,17 +104,15 @@ export default function AllocationPage() {
 
       {/* 총 자본금 설정 */}
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-8">
-        <h2 className="text-xl font-semibold mb-4">🏦 총 자본금 설정</h2>
+        <h2 className="text-xl font-semibold mb-4">🏦 총 자본금 설정 (계좌 자동 조회)</h2>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm text-gray-400 mb-2">자본금 (원)</label>
             <input
               type="number"
               value={totalCapital}
-              onChange={(e) => setTotalCapital(Number(e.target.value))}
-              min="1000000"
-              step="100000"
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white"
+              disabled
+              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white opacity-75 cursor-not-allowed"
             />
           </div>
           <div>
