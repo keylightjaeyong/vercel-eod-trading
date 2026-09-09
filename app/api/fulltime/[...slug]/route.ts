@@ -2,28 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const HEROKU_BACKEND_URL = process.env.HEROKU_BACKEND_URL || 'http://localhost:5000';
 
-async function buildUrl(request: NextRequest, params: any) {
-  let slug: string[] = [];
-
-  if (params.slug) {
-    // params이 Promise일 수 있음 (Next.js 16+)
-    const resolvedParams = await Promise.resolve(params.slug);
-    slug = Array.isArray(resolvedParams) ? resolvedParams : [resolvedParams];
-  }
-
+async function buildUrl(request: NextRequest, context: any) {
+  // params이 Promise로 감싸져 있을 수 있음
+  const params = await context.params;
+  const slug = Array.isArray(params?.slug) ? params.slug : [];
   const slugPath = slug.join('/');
   const queryString = request.nextUrl.search;
-  return `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}${queryString}`;
+  const url = `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}${queryString}`;
+
+  console.log('📌 params:', params);
+  console.log('📌 slug:', slug);
+  console.log('🔗 Full URL:', url);
+
+  return url;
 }
 
 export async function GET(request: NextRequest, context: any) {
   try {
-    const url = await buildUrl(request, context.params);
-
-    console.log('🔗 Full URL:', url);
-    console.log('📌 HEROKU_BACKEND_URL:', HEROKU_BACKEND_URL);
-    console.log('📌 params:', context.params);
-
+    const url = await buildUrl(request, context);
     const response = await fetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -39,7 +35,7 @@ export async function GET(request: NextRequest, context: any) {
 
 export async function POST(request: NextRequest, context: any) {
   try {
-    const url = await buildUrl(request, context.params);
+    const url = await buildUrl(request, context);
     const body = await request.json();
 
     const response = await fetch(url, {
@@ -58,7 +54,7 @@ export async function POST(request: NextRequest, context: any) {
 
 export async function PUT(request: NextRequest, context: any) {
   try {
-    const url = await buildUrl(request, context.params);
+    const url = await buildUrl(request, context);
     const body = await request.json();
 
     const response = await fetch(url, {
@@ -77,7 +73,7 @@ export async function PUT(request: NextRequest, context: any) {
 
 export async function DELETE(request: NextRequest, context: any) {
   try {
-    const url = await buildUrl(request, context.params);
+    const url = await buildUrl(request, context);
 
     const response = await fetch(url, {
       method: 'DELETE',
