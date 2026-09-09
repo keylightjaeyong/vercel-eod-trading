@@ -2,41 +2,45 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const HEROKU_BACKEND_URL = process.env.HEROKU_BACKEND_URL || 'http://localhost:5000';
 
-export async function GET(request: NextRequest, { params }: any) {
-  try {
-    const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
-    const slugPath = slug.join('/');
-    const queryString = request.nextUrl.search;
-    const url = `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}${queryString}`;
+async function buildUrl(request: NextRequest, params: any) {
+  let slug: string[] = [];
 
-    console.log('🔗 Heroku URL:', url);
+  if (params.slug) {
+    // params이 Promise일 수 있음 (Next.js 16+)
+    const resolvedParams = await Promise.resolve(params.slug);
+    slug = Array.isArray(resolvedParams) ? resolvedParams : [resolvedParams];
+  }
+
+  const slugPath = slug.join('/');
+  const queryString = request.nextUrl.search;
+  return `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}${queryString}`;
+}
+
+export async function GET(request: NextRequest, context: any) {
+  try {
+    const url = await buildUrl(request, context.params);
+
+    console.log('🔗 Full URL:', url);
     console.log('📌 HEROKU_BACKEND_URL:', HEROKU_BACKEND_URL);
+    console.log('📌 params:', context.params);
 
     const response = await fetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
 
-    if (!response.ok) {
-      console.error(`❌ Heroku error: ${response.status}`);
-      const text = await response.text();
-      return NextResponse.json({ status: 'error', error: `Heroku: ${response.status}`, details: text }, { status: response.status });
-    }
-
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error('❌ API failed:', error);
-    return NextResponse.json({ status: 'error', error: '연결 실패', details: String(error) }, { status: 500 });
+    console.error('❌ API Error:', error);
+    return NextResponse.json({ status: 'error', error: String(error) }, { status: 500 });
   }
 }
 
-export async function POST(request: NextRequest, { params }: any) {
+export async function POST(request: NextRequest, context: any) {
   try {
-    const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
-    const slugPath = slug.join('/');
+    const url = await buildUrl(request, context.params);
     const body = await request.json();
-    const url = `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -44,25 +48,18 @@ export async function POST(request: NextRequest, { params }: any) {
       body: JSON.stringify(body),
     });
 
-    if (!response.ok) {
-      const text = await response.text();
-      return NextResponse.json({ status: 'error', error: `Heroku: ${response.status}`, details: text }, { status: response.status });
-    }
-
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error('❌ API failed:', error);
-    return NextResponse.json({ status: 'error', error: '연결 실패', details: String(error) }, { status: 500 });
+    console.error('❌ API Error:', error);
+    return NextResponse.json({ status: 'error', error: String(error) }, { status: 500 });
   }
 }
 
-export async function PUT(request: NextRequest, { params }: any) {
+export async function PUT(request: NextRequest, context: any) {
   try {
-    const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
-    const slugPath = slug.join('/');
+    const url = await buildUrl(request, context.params);
     const body = await request.json();
-    const url = `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}`;
 
     const response = await fetch(url, {
       method: 'PUT',
@@ -70,39 +67,27 @@ export async function PUT(request: NextRequest, { params }: any) {
       body: JSON.stringify(body),
     });
 
-    if (!response.ok) {
-      const text = await response.text();
-      return NextResponse.json({ status: 'error', error: `Heroku: ${response.status}`, details: text }, { status: response.status });
-    }
-
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error('❌ API failed:', error);
-    return NextResponse.json({ status: 'error', error: '연결 실패', details: String(error) }, { status: 500 });
+    console.error('❌ API Error:', error);
+    return NextResponse.json({ status: 'error', error: String(error) }, { status: 500 });
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: any) {
+export async function DELETE(request: NextRequest, context: any) {
   try {
-    const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
-    const slugPath = slug.join('/');
-    const url = `${HEROKU_BACKEND_URL}/api/fulltime/${slugPath}`;
+    const url = await buildUrl(request, context.params);
 
     const response = await fetch(url, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
     });
 
-    if (!response.ok) {
-      const text = await response.text();
-      return NextResponse.json({ status: 'error', error: `Heroku: ${response.status}`, details: text }, { status: response.status });
-    }
-
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error('❌ API failed:', error);
-    return NextResponse.json({ status: 'error', error: '연결 실패', details: String(error) }, { status: 500 });
+    console.error('❌ API Error:', error);
+    return NextResponse.json({ status: 'error', error: String(error) }, { status: 500 });
   }
 }
