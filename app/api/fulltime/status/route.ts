@@ -36,7 +36,16 @@ export async function GET(req: NextRequest) {
       total_capital = row.total_capital || 300000;
       console.log(`✅ Status: 잔고 ${total_capital.toLocaleString()}원`);
     } else {
-      console.log('⚠️ Status: Postgres에 데이터 없음, 기본값 사용');
+      // 데이터가 없으면 초기값 삽입
+      console.log('⚠️ Status: Postgres에 데이터 없음, 초기값 삽입');
+      try {
+        await pool.query(
+          'INSERT INTO trading_status (id, timestamp, total_capital) VALUES (1, $1, 300000) ON CONFLICT (id) DO NOTHING',
+          [timestamp]
+        );
+      } catch (e) {
+        console.log('⚠️ 초기값 삽입 실패:', e);
+      }
     }
 
     // 프론트엔드가 기대하는 형식
