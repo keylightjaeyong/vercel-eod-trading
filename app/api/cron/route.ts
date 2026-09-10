@@ -303,12 +303,26 @@ export async function POST(req: NextRequest) {
     }
     console.log('✅ 토큰 로드 완료');
 
-    // 2. Config 로드
+    // 2. Config 로드 (없으면 기본값 사용)
     console.log('📌 Step 2: Config 로드 중...');
-    const config = await loadConfigFromDB();
+    let config = await loadConfigFromDB();
+
     if (!config) {
-      console.error('❌ Config 없음');
-      throw new Error('설정을 찾을 수 없습니다');
+      console.warn('⚠️ Config 없음, 기본값 사용');
+      config = {
+        global_settings: {
+          enabled: true,
+          test_mode: false,
+          total_capital: 300000,
+          trailing_stop_loss_pct: 0.2,
+          min_drop: 1.0,
+          min_rise: 0.5
+        },
+        stocks: [
+          { code: '000660', name: 'SK하이닉스', enabled: true, allocation_pct: 50 },
+          { code: '005930', name: '삼성전자', enabled: true, allocation_pct: 30 }
+        ]
+      };
     }
     console.log('✅ Config 로드 완료');
 
