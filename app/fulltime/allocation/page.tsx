@@ -10,6 +10,8 @@ interface AllocationData {
       name: string;
       pct: number;
       amount: number;
+      current_price?: number;
+      possible_quantity?: number;
     }
   >;
 }
@@ -137,7 +139,8 @@ export default function AllocationPage() {
                 const amount = (totalCapital * (allocations[code] || 0)) / 100;
                 return (
                   <div key={code} className="bg-gray-900 border border-gray-700 rounded-lg p-4">
-                    <div className="grid grid-cols-4 gap-4 mb-3">
+                    {/* 1행: 종목, 코드, 할당 비율, 할당 금액 */}
+                    <div className="grid grid-cols-4 gap-4 mb-4">
                       <div>
                         <p className="text-sm text-gray-400">종목</p>
                         <p className="font-semibold">{info.name}</p>
@@ -168,6 +171,38 @@ export default function AllocationPage() {
                         </p>
                       </div>
                     </div>
+
+                    {/* 2행: 현재가, 구매 가능 주수 */}
+                    {info.current_price && (
+                      <div className="grid grid-cols-4 gap-4 mb-3 border-t border-gray-700 pt-3">
+                        <div>
+                          <p className="text-sm text-gray-400">현재가</p>
+                          <p className="font-semibold text-yellow-400">
+                            {info.current_price.toLocaleString()}원
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">구매 가능</p>
+                          <p className="font-semibold text-green-400">
+                            {info.possible_quantity || 0}주
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">추정 비용</p>
+                          <p className="font-semibold text-cyan-400">
+                            {(amount / 1000000).toFixed(2)}M원
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">사용률</p>
+                          <p className="font-semibold text-purple-400">
+                            {info.current_price && info.possible_quantity
+                              ? ((info.current_price * info.possible_quantity) / amount * 100).toFixed(1)
+                              : '0'}%
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     {/* 진행 바 */}
                     <div className="flex items-center gap-2">
@@ -221,15 +256,41 @@ export default function AllocationPage() {
       {allocation && Object.keys(allocation.allocations).length > 0 && (
         <div className="mt-8 p-6 bg-gray-800 border border-gray-700 rounded-lg">
           <h3 className="font-semibold mb-4">📈 할당 요약</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {Object.entries(allocation.allocations).map(([code, info]: [string, any]) => {
               const amount = (totalCapital * (allocations[code] || 0)) / 100;
               return (
-                <div key={code} className="p-3 bg-gray-900 rounded">
-                  <p className="text-sm text-gray-400">{info.name}</p>
-                  <p className="font-semibold">
-                    {(amount / 1000000).toFixed(2)}M ({(allocations[code] || 0)}%)
-                  </p>
+                <div key={code} className="p-4 bg-gray-900 rounded border border-gray-700">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="text-sm text-gray-400">{info.name} ({code})</p>
+                      <p className="font-semibold text-lg">
+                        {(amount / 1000000).toFixed(2)}M ({(allocations[code] || 0)}%)
+                      </p>
+                    </div>
+                    {info.current_price && (
+                      <div className="text-right">
+                        <p className="text-sm text-gray-400">현재가</p>
+                        <p className="font-semibold text-yellow-400">
+                          {info.current_price.toLocaleString()}원
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  {info.possible_quantity && (
+                    <div className="flex gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-400">구매 가능:</span>
+                        <span className="font-semibold text-green-400 ml-1">{info.possible_quantity}주</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">예상 가격:</span>
+                        <span className="font-semibold text-cyan-400 ml-1">
+                          {(info.current_price * info.possible_quantity).toLocaleString()}원
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
