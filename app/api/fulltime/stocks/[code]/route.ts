@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const HEROKU_API = process.env.HEROKU_API_URL || 'https://eod-trading-backend.herokuapp.com';
+async function connectPostgres() {
+  const { Pool } = await import('pg');
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+  });
+  return pool;
+}
 
 // PUT: 종목 활성화/비활성화
 export async function PUT(req: NextRequest, context: { params: Promise<{ code: string }> }) {
@@ -8,16 +14,13 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ code: s
     const params = await context.params;
     const { code } = params;
     const body = await req.json();
+    const { enabled } = body;
 
-    const response = await fetch(`${HEROKU_API}/api/fulltime/stocks/${code}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const pool = await connectPostgres();
+    await pool.query('UPDATE stocks SET enabled=$1 WHERE code=$2', [enabled, code]);
+    await pool.end();
 
-    if (!response.ok) throw new Error('Heroku 요청 실패');
-    const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json({ success: true, message: '종목 상태가 변경되었습니다' });
   } catch (error) {
     console.error('❌ 종목 상태 변경 실패:', error);
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
@@ -30,14 +33,11 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ code
     const params = await context.params;
     const { code } = params;
 
-    const response = await fetch(`${HEROKU_API}/api/fulltime/stocks/${code}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const pool = await connectPostgres();
+    await pool.query('DELETE FROM stocks WHERE code=$1', [code]);
+    await pool.end();
 
-    if (!response.ok) throw new Error('Heroku 요청 실패');
-    const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json({ success: true, message: '종목이 삭제되었습니다' });
   } catch (error) {
     console.error('❌ 종목 삭제 실패:', error);
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
