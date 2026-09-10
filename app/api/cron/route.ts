@@ -234,9 +234,14 @@ async function executeTrade(config: any, token: string): Promise<TradeResult> {
     const enabled = config.global_settings?.enabled ?? false;
 
     // 실제 잔고 조회 (거래 활성화 여부와 무관하게)
-    const balance = await getBalance(token);
-    if (balance > 0) {
-      await saveStatusToDB(balance);
+    try {
+      const balance = await getBalance(token);
+      if (balance > 0) {
+        await saveStatusToDB(balance);
+      }
+    } catch (e) {
+      console.error('⚠️ 잔고 조회 오류 (무시):', e);
+      // 잔고 조회 실패해도 계속 진행
     }
 
     if (!enabled) {
