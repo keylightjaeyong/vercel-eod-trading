@@ -171,7 +171,7 @@ export default function AllocationPage() {
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-8">
             <h2 className="text-xl font-semibold mb-6">📊 종목별 할당</h2>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               {Object.entries(allocation.allocations).map(([code, info]: [string, any]) => {
                 // 실제 잔고가 있으면 그것을 기반으로, 없으면 설정된 자본금 기반으로 계산
                 const capital = actualBalance || totalCapital;
@@ -184,20 +184,20 @@ export default function AllocationPage() {
                   : possibleQty;
 
                 return (
-                  <div key={code} className="bg-gray-900 border border-gray-700 rounded-lg p-4">
-                    {/* 1행: 종목, 코드, 할당 비율, 할당 금액 */}
-                    <div className="grid grid-cols-4 gap-4 mb-4">
+                  <div key={code} className="bg-gray-900 border border-gray-700 rounded-lg p-6">
+                    {/* 1행: 종목, 코드 */}
+                    <div className="flex items-end justify-between mb-6">
                       <div>
-                        <p className="text-sm text-gray-400">종목</p>
-                        <p className="font-semibold">{info.name}</p>
+                        <p className="text-sm text-gray-400 mb-1">종목</p>
+                        <p className="text-2xl font-bold">{info.name} ({code})</p>
                       </div>
-                      <div>
-                        <p className="text-sm text-gray-400">코드</p>
-                        <p className="font-mono">{code}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-400">할당 비율</p>
-                        <div className="flex items-center gap-2">
+                    </div>
+
+                    {/* 2행: 할당 비율 입력과 할당 금액 */}
+                    <div className="grid grid-cols-2 gap-6 mb-6">
+                      <div className="bg-blue-950 border border-blue-800 rounded-lg p-4">
+                        <p className="text-sm text-gray-400 mb-3">할당 비율</p>
+                        <div className="flex items-baseline gap-3">
                           <input
                             type="number"
                             value={allocations[code] || 0}
@@ -205,22 +205,25 @@ export default function AllocationPage() {
                             min="0"
                             max="100"
                             step="1"
-                            className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white"
+                            className="text-4xl font-bold bg-blue-900 border border-blue-700 rounded px-3 py-2 text-blue-300 w-24"
                           />
-                          <span>%</span>
+                          <span className="text-3xl text-blue-300">%</span>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-sm text-gray-400">할당 금액</p>
-                        <p className="font-semibold text-blue-400">
+                      <div className="bg-green-950 border border-green-800 rounded-lg p-4">
+                        <p className="text-sm text-gray-400 mb-3">할당 금액</p>
+                        <p className="text-4xl font-bold text-green-300">
                           {(amount / 1000000).toFixed(2)}M
+                        </p>
+                        <p className="text-sm text-green-400 mt-2">
+                          ₩{amount.toLocaleString()}
                         </p>
                       </div>
                     </div>
 
-                    {/* 2행: 현재가, 구매 가능 주수 (할당액 vs 최대) */}
+                    {/* 3행: 현재가, 구매 가능 주수 (할당액 vs 최대) */}
                     {info.current_price && (
-                      <div className="border-t border-green-700 pt-3 space-y-2">
+                      <div className="border-t border-gray-700 pt-6 space-y-3">
                         {/* 할당액 기반 */}
                         <div className="grid grid-cols-4 gap-4 bg-green-950 bg-opacity-30 rounded p-3">
                           <div>
@@ -284,18 +287,22 @@ export default function AllocationPage() {
                     )}
 
                     {/* 진행 바 */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-gray-800 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all"
-                          style={{
-                            width: `${Math.min((allocations[code] || 0) / 100 * 100, 100)}%`,
-                          }}
-                        />
+                    <div className="mt-6 pt-4 border-t border-gray-700">
+                      <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                          <div className="bg-gray-800 rounded-full h-3">
+                            <div
+                              className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all"
+                              style={{
+                                width: `${Math.min((allocations[code] || 0), 100)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-lg font-semibold text-blue-400 w-12">
+                          {(allocations[code] || 0).toFixed(0)}%
+                        </span>
                       </div>
-                      <span className="text-xs text-gray-400 w-8">
-                        {((allocations[code] || 0) / 100 * 100).toFixed(0)}%
-                      </span>
                     </div>
                   </div>
                 );
