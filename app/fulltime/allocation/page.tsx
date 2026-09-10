@@ -19,6 +19,7 @@ interface AllocationData {
 export default function AllocationPage() {
   const [allocation, setAllocation] = useState<AllocationData | null>(null);
   const [totalCapital, setTotalCapital] = useState(10000000);
+  const [actualBalance, setActualBalance] = useState<number | null>(null);
   const [allocations, setAllocations] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,28 @@ export default function AllocationPage() {
   // 할당 데이터 조회
   useEffect(() => {
     fetchAllocation();
+    fetchActualBalance();
   }, []);
+
+  const fetchActualBalance = async () => {
+    try {
+      const accountId = localStorage.getItem('kis_account_id') || '';
+      const url = accountId
+        ? `/api/account?account_id=${accountId}`
+        : '/api/account';
+
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data?.balance) {
+          setActualBalance(data.data.balance);
+        }
+      }
+    } catch (err) {
+      // 실제 잔고 조회 실패해도 계속 진행
+      console.warn('실제 잔고 조회 실패:', err);
+    }
+  };
 
   const fetchAllocation = async () => {
     try {
@@ -106,21 +128,30 @@ export default function AllocationPage() {
 
       {/* 총 자본금 설정 */}
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-8">
-        <h2 className="text-xl font-semibold mb-4">🏦 총 자본금 설정 (계좌 자동 조회)</h2>
+        <h2 className="text-xl font-semibold mb-4">🏦 계좌 잔고 정보</h2>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-2">자본금 (원)</label>
-            <div className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white font-mono text-lg">
-              {totalCapital.toLocaleString()}
+            <label className="block text-sm text-gray-400 mb-2">실제 잔고 (원)</label>
+            <div className={`rounded px-3 py-2 text-white font-mono text-lg font-semibold border ${
+              actualBalance ? 'bg-green-900 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700'
+            }`}>
+              {actualBalance ? actualBalance.toLocaleString() : totalCapital.toLocaleString()}
             </div>
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-2">포맷된 금액</label>
-            <div className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white">
-              {(totalCapital / 1000000).toFixed(1)}M원
+            <div className={`rounded px-3 py-2 text-white font-semibold border ${
+              actualBalance ? 'bg-green-900 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700'
+            }`}>
+              {actualBalance ? (actualBalance / 1000000).toFixed(2) : (totalCapital / 1000000).toFixed(1)}M원
             </div>
           </div>
         </div>
+        {actualBalance && (
+          <div className="mt-3 p-3 bg-green-900 border border-green-700 rounded text-green-300 text-sm">
+            ✅ 계좌에서 실제 잔고를 조회했습니다. 이 잔고를 기반으로 구매 가능한 주수가 계산됩니다.
+          </div>
+        )}
       </div>
 
       {/* 종목별 할당 */}
@@ -136,7 +167,11 @@ export default function AllocationPage() {
 
             <div className="space-y-4">
               {Object.entries(allocation.allocations).map(([code, info]: [string, any]) => {
-                const amount = (totalCapital * (allocations[code] || 0)) / 100;
+                // 실제 잔고가 있으면 그것을 기반으로, 없으면 설정된 자본금 기반으로 계산
+                const capital = actualBalance || totalCapital;
+                const amount = (capital * (allocations[code] || 0)) / 100;
+                const possibleQty = info.current_price ? Math.floor(amount / info.current_price) : 0;
+
                 return (
                   <div key={code} className="bg-gray-900 border border-gray-700 rounded-lg p-4">
                     {/* 1행: 종목, 코드, 할당 비율, 할당 금액 */}
@@ -172,9 +207,9 @@ export default function AllocationPage() {
                       </div>
                     </div>
 
-                    {/* 2행: 현재가, 구매 가능 주수 */}
+                    {/* 2행: 현재가, 구매 가능 주수 (실제 잔고 기반) */}
                     {info.current_price && (
-                      <div className="grid grid-cols-4 gap-4 mb-3 border-t border-gray-700 pt-3">
+                      <div className="grid grid-cols-4 gap-4 mb-3 border-t border-green-700 pt-3 bg-green-950 bg-opacity-30 rounded p-3">
                         <div>
                           <p className="text-sm text-gray-400">현재가</p>
                           <p className="font-semibold text-yellow-400">
@@ -182,13 +217,13 @@ export default function AllocationPage() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-400">구매 가능</p>
-                          <p className="font-semibold text-green-400">
-                            {info.possible_quantity || 0}주
+                          <p className="text-sm text-gray-400">구매 가능 ({actualBalance ? '실제잔고' : '설정액'})</p>
+                          <p className="font-semibold text-green-400 text-xl">
+                            {possibleQty}주 ✅
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-400">추정 비용</p>
+                          <p className="text-sm text-gray-400">할당액</p>
                           <p className="font-semibold text-cyan-400">
                             {(amount / 1000000).toFixed(2)}M원
                           </p>
@@ -196,8 +231,8 @@ export default function AllocationPage() {
                         <div>
                           <p className="text-sm text-gray-400">사용률</p>
                           <p className="font-semibold text-purple-400">
-                            {info.current_price && info.possible_quantity
-                              ? ((info.current_price * info.possible_quantity) / amount * 100).toFixed(1)
+                            {possibleQty && info.current_price
+                              ? ((info.current_price * possibleQty) / amount * 100).toFixed(1)
                               : '0'}%
                           </p>
                         </div>
@@ -259,7 +294,9 @@ export default function AllocationPage() {
             <h3 className="font-semibold mb-4">📈 할당 요약</h3>
             <div className="grid grid-cols-1 gap-4">
               {Object.entries(allocation.allocations).map(([code, info]: [string, any]) => {
-                const amount = (totalCapital * (allocations[code] || 0)) / 100;
+                const capital = actualBalance || totalCapital;
+                const amount = (capital * (allocations[code] || 0)) / 100;
+                const possibleQty = info.current_price ? Math.floor(amount / info.current_price) : 0;
                 return (
                   <div key={code} className="p-4 bg-gray-900 rounded border border-gray-700">
                     <div className="flex justify-between items-start mb-2">
