@@ -290,21 +290,27 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Postgres에서 토큰 로드
+    console.log('📌 Step 1: 토큰 로드 중...');
     const tokenData = await loadTokenFromDB();
     if (!tokenData) {
+      console.error('❌ 토큰 없음');
       throw new Error('토큰을 찾을 수 없습니다');
     }
+    console.log('✅ 토큰 로드 완료');
 
     // 2. Config 로드
+    console.log('📌 Step 2: Config 로드 중...');
     const config = await loadConfigFromDB();
     if (!config) {
+      console.error('❌ Config 없음');
       throw new Error('설정을 찾을 수 없습니다');
     }
+    console.log('✅ Config 로드 완료');
 
     // 3. 거래 실행
+    console.log('📌 Step 3: 거래 실행 중...');
     const result = await executeTrade(config, tokenData.access_token);
-
-    console.log('✅ 거래 사이클 완료:', result.message);
+    console.log('✅ 거래 실행 완료:', result.message);
 
     return NextResponse.json(
       {
@@ -317,6 +323,7 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error('❌ 거래 실패:', error);
+    console.error('Stack:', (error as Error).stack);
 
     return NextResponse.json(
       {
