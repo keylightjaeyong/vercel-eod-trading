@@ -1,105 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getKisApi } from '@/lib/kis/api';
-import { telegramBot } from '@/lib/telegram/bot';
 
 /**
- * GET /api/account - 계좌 정보 조회
+ * GET /api/account - 실제 KIS 계좌 잔고 조회
+ * Heroku의 /api/account 엔드포인트를 프록시
  */
 export async function GET(request: NextRequest) {
   try {
-    // 환경변수 확인
-    const hasAppKey = !!process.env.KIS_APPKEY;
-    const hasSecret = !!process.env.KIS_SECRET;
+    // Heroku 백엔드에서 계좌 정보 조회
+    const herokuUrl = new URL(
+      'https://eod-trading-backend-a756b4bf06ef.herokuapp.com/api/account'
+    );
 
-    console.log('📋 KIS 환경변수 상태:', {
-      appkey: hasAppKey ? '✅' : '❌',
-      secret: hasSecret ? '✅' : '❌'
+    // 쿼리 파라미터 전달
+    const params = request.nextUrl.searchParams;
+    if (params.has('account_id')) {
+      herokuUrl.searchParams.set('account_id', params.get('account_id')!);
+    }
+
+    const response = await fetch(herokuUrl.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
     });
 
-    if (!hasAppKey || !hasSecret) {
+    if (!response.ok) {
       return NextResponse.json(
         {
           success: false,
-          error: '❌ KIS API 환경변수가 설정되지 않았습니다',
-          details: {
-            appkey: hasAppKey,
-            secret: hasSecret
-          }
+          error: `Heroku API error: ${response.status}`,
         },
-        { status: 400 }
+        { status: response.status }
       );
     }
 
-    // 쿼리 파라미터에서 계좌ID 읽기
-    const url = new URL(request.url);
-    let accountId = url.searchParams.get('account_id') || '';
-    console.log('📋 쿼리 파라미터 계좌ID:', accountId ? '✅ ' + accountId : '❌');
-
-    // 쿼리 파라미터에 없으면 쿠키에서 읽기
-    if (!accountId) {
-      const cookieString = request.headers.get('cookie') || '';
-      console.log('📋 쿠키 문자열:', cookieString);
-
-      const cookies = cookieString.split(';').reduce((acc, cookie) => {
-        const [key, value] = cookie.trim().split('=');
-        acc[key] = decodeURIComponent(value);
-        return acc;
-      }, {} as Record<string, string>);
-
-      accountId = cookies['kis_account_id'] || '';
-      console.log('🍪 쿠키에서 읽은 계좌ID:', accountId ? '✅ ' + accountId : '❌');
-    }
-
-    if (!accountId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: '❌ 계좌ID가 설정되지 않았습니다. 대시보드의 "계좌설정" 버튼에서 계좌ID를 입력하세요.',
-          details: {
-            accountId: false
-          }
-        },
-        { status: 400 }
-      );
-    }
-
-    // kisApi 인스턴스 가져오기 (매 요청마다 환경변수 업데이트)
-    const kisApi = getKisApi();
-    kisApi.setAccountId(accountId);
-
-    const appKeyExists = !!process.env.KIS_APPKEY;
-    const appSecretExists = !!process.env.KIS_SECRET;
-    const actualAppKey = !!(kisApi as any).appKey;
-    const actualSecret = !!(kisApi as any).appSecret;
-
-    console.log(`🔑 환경변수: appKey=${appKeyExists}, secret=${appSecretExists}, 실제=${actualAppKey}/${actualSecret}`);
-
-    const account = await kisApi.getAccount();
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          account_id: account.account_id,
-          balance: account.balance,
-          evaluating: account.evaluating,
-          profit_loss: account.profit_loss,
-          profit_rate: account.profit_rate,
-          total_assets: account.balance + account.evaluating,
-        },
-      },
-      { status: 200 }
-    );
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('❌ 계좌 조회 에러:', errorMsg);
-
-    await telegramBot.notifyError('계좌 정보 조회 실패', errorMsg);
-
+    console.error('❌ 계좌 정보 조회 실패:', error);
     return NextResponse.json(
       {
         success: false,
-        error: errorMsg,
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );
