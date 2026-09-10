@@ -172,6 +172,11 @@ export default function AllocationPage() {
                 const amount = (capital * (allocations[code] || 0)) / 100;
                 const possibleQty = info.current_price ? Math.floor(amount / info.current_price) : 0;
 
+                // 전체 잔고로 구매 가능한 최대 주수
+                const maxPossibleQty = info.current_price && actualBalance
+                  ? Math.floor(actualBalance / info.current_price)
+                  : possibleQty;
+
                 return (
                   <div key={code} className="bg-gray-900 border border-gray-700 rounded-lg p-4">
                     {/* 1행: 종목, 코드, 할당 비율, 할당 금액 */}
@@ -207,35 +212,68 @@ export default function AllocationPage() {
                       </div>
                     </div>
 
-                    {/* 2행: 현재가, 구매 가능 주수 (실제 잔고 기반) */}
+                    {/* 2행: 현재가, 구매 가능 주수 (할당액 vs 최대) */}
                     {info.current_price && (
-                      <div className="grid grid-cols-4 gap-4 mb-3 border-t border-green-700 pt-3 bg-green-950 bg-opacity-30 rounded p-3">
-                        <div>
-                          <p className="text-sm text-gray-400">현재가</p>
-                          <p className="font-semibold text-yellow-400">
-                            {info.current_price.toLocaleString()}원
-                          </p>
+                      <div className="border-t border-green-700 pt-3 space-y-2">
+                        {/* 할당액 기반 */}
+                        <div className="grid grid-cols-4 gap-4 bg-green-950 bg-opacity-30 rounded p-3">
+                          <div>
+                            <p className="text-sm text-gray-400">현재가</p>
+                            <p className="font-semibold text-yellow-400">
+                              {info.current_price.toLocaleString()}원
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-400">할당액 기반</p>
+                            <p className="font-semibold text-green-400 text-xl">
+                              {possibleQty}주
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-400">할당액</p>
+                            <p className="font-semibold text-cyan-400">
+                              {(amount / 1000000).toFixed(2)}M원
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-400">사용률</p>
+                            <p className="font-semibold text-purple-400">
+                              {possibleQty && info.current_price
+                                ? ((info.current_price * possibleQty) / amount * 100).toFixed(1)
+                                : '0'}%
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm text-gray-400">구매 가능 ({actualBalance ? '실제잔고' : '설정액'})</p>
-                          <p className="font-semibold text-green-400 text-xl">
-                            {possibleQty}주 ✅
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-400">할당액</p>
-                          <p className="font-semibold text-cyan-400">
-                            {(amount / 1000000).toFixed(2)}M원
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-400">사용률</p>
-                          <p className="font-semibold text-purple-400">
-                            {possibleQty && info.current_price
-                              ? ((info.current_price * possibleQty) / amount * 100).toFixed(1)
-                              : '0'}%
-                          </p>
-                        </div>
+
+                        {/* 최대 잔고 기반 */}
+                        {actualBalance && maxPossibleQty > possibleQty && (
+                          <div className="grid grid-cols-4 gap-4 bg-blue-950 bg-opacity-30 rounded p-3 border border-blue-700">
+                            <div>
+                              <p className="text-sm text-gray-400">최대 구매</p>
+                              <p className="font-semibold text-blue-400">
+                                전체 잔고 기반
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-400">최대 구매 가능</p>
+                              <p className="font-semibold text-blue-300 text-xl">
+                                {maxPossibleQty}주 💰
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-400">필요 금액</p>
+                              <p className="font-semibold text-blue-300">
+                                {(info.current_price * maxPossibleQty / 1000000).toFixed(2)}M원
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-400">남은 금액</p>
+                              <p className="font-semibold text-blue-300">
+                                {((actualBalance - (info.current_price * maxPossibleQty)) / 1000000).toFixed(3)}M원
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
