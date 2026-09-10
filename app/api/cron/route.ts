@@ -205,7 +205,7 @@ async function saveStatusToDB(balance: number): Promise<boolean> {
     const pool = await connectPostgres();
     const now = new Date().toISOString();
     await pool.query(
-      'INSERT INTO trading_status (id, timestamp, total_capital, active_positions, stocks_enabled, daily_trades, daily_profit, monthly_profit) VALUES (1, $1, $2, 0, 2, 0, 0, 0) ON CONFLICT (id) DO UPDATE SET timestamp=$1, total_capital=$2, updated_at=CURRENT_TIMESTAMP',
+      'INSERT INTO trading_status (id, timestamp, total_capital) VALUES (1, $1, $2) ON CONFLICT (id) DO UPDATE SET timestamp=$1, total_capital=$2',
       [now, balance]
     );
     await pool.end();
