@@ -151,19 +151,26 @@ async function getCurrentPrice(code: string, token: string): Promise<number> {
 async function getBalance(token: string): Promise<number> {
   try {
     const account = process.env.KIS_ACCOUNT || '55049812';
-    const response = await fetch(
-      'https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/trading/inquire-balance',
-      {
-        method: 'GET',
-        headers: {
-          'content-type': 'application/json; charset=utf-8',
-          'authorization': `Bearer ${token}`,
-          'appkey': process.env.KIS_APPKEY!,
-          'appsecret': process.env.KIS_SECRET!,
-          'tr_id': 'TTTC8434R',
-        },
-      }
-    );
+    const cano = account.substring(0, 8);
+    const acntPrdtCd = account.substring(8, 10);
+
+    const url = new URL('https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/trading/inquire-balance');
+    url.searchParams.append('CANO', cano);
+    url.searchParams.append('ACNT_PRDT_CD', acntPrdtCd);
+    url.searchParams.append('AFHR_FLPR_YN', 'N');
+    url.searchParams.append('OFL_YN', '');
+    url.searchParams.append('INQR_DVSN', '02');
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'authorization': `Bearer ${token}`,
+        'appkey': process.env.KIS_APPKEY!,
+        'appsecret': process.env.KIS_SECRET!,
+        'tr_id': 'TTTC8434R',
+      },
+    });
 
     const data = await response.json() as any;
     if (data.rt_cd === '0' && data.output2) {
@@ -172,7 +179,7 @@ async function getBalance(token: string): Promise<number> {
       console.log(`✅ 실제 잔고: ${balance.toLocaleString()} KRW`);
       return balance;
     } else {
-      console.error(`❌ 잔고 조회 실패: ${data.msg1}`);
+      console.error(`❌ 잔고 조회 실패: ${data.msg1 || JSON.stringify(data)}`);
       return 0;
     }
   } catch (error) {
