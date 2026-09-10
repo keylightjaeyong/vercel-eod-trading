@@ -102,6 +102,40 @@ export default function SettingsPage() {
     }
   };
 
+  // 거래 활성화/비활성화
+  const handleToggleTrading = async () => {
+    setSaving(true);
+    try {
+      const newEnabled = !settings?.enabled;
+      console.log('📤 거래 토글 요청:', { newEnabled });
+
+      const response = await fetch('/api/fulltime/trading/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newEnabled }),
+      });
+
+      if (!response.ok) throw new Error('거래 제어 실패');
+      const data = await response.json();
+      console.log('✅ 거래 토글 응답:', data);
+
+      // 즉시 설정 새로고침 (Heroku와 동기화)
+      console.log('🔄 설정 새로고침 중...');
+      await new Promise(resolve => setTimeout(resolve, 500)); // 0.5초 대기
+      await fetchSettings();
+      console.log('✅ 설정 동기화 완료');
+
+      setError(null);
+    } catch (err) {
+      console.error('❌ 거래 토글 실패:', err);
+      setError(err instanceof Error ? err.message : '알 수 없는 오류');
+      // 에러 발생 시에도 상태 새로고침
+      await fetchSettings();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // 설정 변경
   const handleSettingChange = (key: keyof GlobalSettings, value: any) => {
     if (settings) {
@@ -141,6 +175,56 @@ export default function SettingsPage() {
       {error && (
         <div className="bg-red-900 border border-red-700 rounded-lg p-4 mb-8 text-red-200">
           ❌ {error}
+        </div>
+      )}
+
+      {/* 거래 제어 */}
+      {settings && (
+        <div className="bg-gradient-to-r from-red-900 to-red-800 border border-red-700 rounded-lg p-6 mb-8">
+          <h2 className="text-xl font-semibold mb-4">🛑 거래 제어</h2>
+          <div className="grid grid-cols-2 gap-6">
+            {/* 거래 활성화 상태 */}
+            <div className="bg-gray-900 bg-opacity-50 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-2">거래 상태</p>
+              <p className={`text-3xl font-bold mb-3 ${settings.enabled ? 'text-green-400' : 'text-red-400'}`}>
+                {settings.enabled ? '🟢 진행 중' : '🔴 중지됨'}
+              </p>
+              <button
+                onClick={handleToggleTrading}
+                disabled={saving}
+                className={`w-full py-2 px-4 rounded-lg font-semibold transition-colors ${
+                  settings.enabled
+                    ? 'bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white'
+                    : 'bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white'
+                }`}
+              >
+                {saving ? '처리 중...' : (settings.enabled ? '🛑 거래 중지' : '▶️ 거래 시작')}
+              </button>
+            </div>
+
+            {/* 테스트 모드 */}
+            <div className="bg-gray-900 bg-opacity-50 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-2">거래 모드</p>
+              <p className={`text-3xl font-bold mb-3 ${settings.test_mode ? 'text-yellow-400' : 'text-red-500'}`}>
+                {settings.test_mode ? '📊 모의' : '💰 실제'}
+              </p>
+              <button
+                onClick={handleToggleTestMode}
+                disabled={saving}
+                className="w-full bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 py-2 px-4 rounded-lg font-semibold transition-colors text-white"
+              >
+                {saving ? '처리 중...' : (settings.test_mode ? '실거래로 전환' : '모의거래로 전환')}
+              </button>
+            </div>
+          </div>
+
+          {/* 주의 메시지 */}
+          <div className="mt-4 p-3 bg-red-950 border border-red-700 rounded text-sm text-red-200">
+            <p className="font-semibold mb-1">⚠️ 중요 안내:</p>
+            <p>• 거래 중지: 현재 진행 중인 거래는 계속 진행되며, 새로운 거래만 중단됩니다</p>
+            <p>• 재개: 버튼을 다시 클릭하면 거래가 다시 시작됩니다</p>
+            <p>• 모드 전환: 거래 모드는 즉시 전환되지만, 활성화된 거래 루프에는 적용되지 않을 수 있습니다</p>
+          </div>
         </div>
       )}
 

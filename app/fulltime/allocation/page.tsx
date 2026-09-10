@@ -58,20 +58,26 @@ export default function AllocationPage() {
         ? `/api/fulltime/allocation?account_id=${accountId}`
         : '/api/fulltime/allocation';
 
+      console.log('🔍 Fetching allocation from:', url);
       const response = await fetch(url);
       if (!response.ok) throw new Error('할당 조회 실패');
       const data = await response.json();
+      console.log('📡 Allocation response:', data);
+      console.log('🏷️ Allocations:', data.data.allocations);
+
       setAllocation(data.data);
       setTotalCapital(data.data.total_capital);
 
       // 할당 비율 설정
       const allocs: Record<string, number> = {};
       Object.entries(data.data.allocations).forEach(([code, info]: [string, any]) => {
+        console.log(`  ${code}: current_price=${info.current_price}, pct=${info.pct}`);
         allocs[code] = info.pct;
       });
       setAllocations(allocs);
       setError(null);
     } catch (err) {
+      console.error('❌ Error fetching allocation:', err);
       setError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
       setLoading(false);
@@ -325,91 +331,6 @@ export default function AllocationPage() {
         </div>
       )}
 
-      {/* 요약 */}
-      {allocation && Object.keys(allocation.allocations).length > 0 && (
-        <>
-          <div className="mt-8 p-6 bg-gray-800 border border-gray-700 rounded-lg">
-            <h3 className="font-semibold mb-4">📈 할당 요약</h3>
-            <div className="grid grid-cols-1 gap-4">
-              {Object.entries(allocation.allocations).map(([code, info]: [string, any]) => {
-                const capital = actualBalance || totalCapital;
-                const amount = (capital * (allocations[code] || 0)) / 100;
-                const possibleQty = info.current_price ? Math.floor(amount / info.current_price) : 0;
-                return (
-                  <div key={code} className="p-4 bg-gray-900 rounded border border-gray-700">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="text-sm text-gray-400">{info.name} ({code})</p>
-                        <p className="font-semibold text-lg">
-                          {(amount / 1000000).toFixed(2)}M ({(allocations[code] || 0)}%)
-                        </p>
-                      </div>
-                      {info.current_price && (
-                        <div className="text-right">
-                          <p className="text-sm text-gray-400">현재가</p>
-                          <p className="font-semibold text-yellow-400">
-                            {info.current_price.toLocaleString()}원
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    {info.possible_quantity && (
-                      <div className="flex gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-400">구매 가능:</span>
-                          <span className="font-semibold text-green-400 ml-1">{info.possible_quantity}주</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">예상 가격:</span>
-                          <span className="font-semibold text-cyan-400 ml-1">
-                            {(info.current_price * info.possible_quantity).toLocaleString()}원
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 총 구매 가능 주수 */}
-          <div className="mt-8 p-6 bg-gradient-to-r from-green-900 to-emerald-900 border border-green-700 rounded-lg">
-            <h3 className="font-semibold mb-4 text-lg">📊 총 자본금 구매 가능 현황</h3>
-            <div className="grid grid-cols-2 gap-6">
-              {/* 좌측: 종목별 주수 */}
-              <div>
-                <p className="text-sm text-green-300 mb-3 font-semibold">종목별 구매 가능 주수</p>
-                <div className="space-y-2">
-                  {Object.entries(allocation.allocations).map(([code, info]: [string, any]) => (
-                    <div key={code} className="flex justify-between items-center p-2 bg-gray-900 bg-opacity-50 rounded">
-                      <span className="text-gray-300">{info.name}</span>
-                      <span className="font-semibold text-green-400">{info.possible_quantity || 0}주</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 우측: 합계 */}
-              <div className="flex flex-col justify-center">
-                <p className="text-sm text-green-300 mb-3 font-semibold">전체 합계</p>
-                <div className="p-4 bg-gray-900 bg-opacity-50 rounded border-2 border-green-500">
-                  <p className="text-gray-400 text-sm mb-1">총 구매 가능 주수</p>
-                  <p className="text-4xl font-bold text-green-400">
-                    {Object.values(allocation.allocations).reduce((sum, info: any) => sum + (info.possible_quantity || 0), 0)}주
-                  </p>
-                  <p className="text-gray-400 text-sm mt-2">
-                    {Object.values(allocation.allocations).reduce((sum, info: any) => {
-                      const amount = (totalCapital * ((allocations[(Object.keys(allocation.allocations).find(k => allocation.allocations[k] === info))!] || 0))) / 100;
-                      return sum + (info.current_price && info.possible_quantity ? info.current_price * info.possible_quantity : 0);
-                    }, 0).toLocaleString()}원 사용
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }
