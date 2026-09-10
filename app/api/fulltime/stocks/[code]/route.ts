@@ -8,14 +8,11 @@ async function connectPostgres() {
   return pool;
 }
 
-interface Params {
-  code: string;
-}
-
 // PUT: 종목 활성화/비활성화
-export async function PUT(req: NextRequest, context: { params: Params }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ code: string }> }) {
   try {
-    const { code } = context.params;
+    const params = await context.params;
+    const { code } = params;
     const body = await req.json() as any;
     const { enabled } = body;
 
@@ -34,9 +31,10 @@ export async function PUT(req: NextRequest, context: { params: Params }) {
 }
 
 // DELETE: 종목 삭제
-export async function DELETE(req: NextRequest, context: { params: Params }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ code: string }> }) {
   try {
-    const { code } = context.params;
+    const params = await context.params;
+    const { code } = params;
 
     const pool = await connectPostgres();
     await pool.query('DELETE FROM stocks WHERE code=$1', [code]);
