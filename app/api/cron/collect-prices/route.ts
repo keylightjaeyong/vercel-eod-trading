@@ -24,6 +24,22 @@ export async function POST(req: NextRequest) {
   const pool = await connectPostgres();
 
   try {
+    // 0. price_snapshots 테이블 자동 생성
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS price_snapshots (
+          id SERIAL PRIMARY KEY,
+          code VARCHAR(10) NOT NULL,
+          timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          close DECIMAL(10, 2) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✅ price_snapshots 테이블 확인/생성됨');
+    } catch (err: any) {
+      console.log(`⚠️ price_snapshots 테이블 생성 시도: ${err.message}`);
+    }
+
     // 1. 활성화된 종목 조회
     const stocksResult = await pool.query(
       'SELECT code, name FROM stocks WHERE enabled = true LIMIT 50'
