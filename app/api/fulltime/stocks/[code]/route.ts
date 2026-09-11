@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Pool } from 'pg';
 
 async function connectPostgres() {
-  const { Pool } = await import('pg');
-  console.log('🔍 DATABASE_URL:', process.env.DATABASE_URL ? '설정됨 ✓' : '없음 ❌');
-  if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL 환경변수가 설정되지 않았습니다!');
-  }
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
@@ -15,36 +11,50 @@ async function connectPostgres() {
 
 // PUT: 종목 활성화/비활성화
 export async function PUT(req: NextRequest, context: { params: Promise<{ code: string }> }) {
+  let pool: any = null;
   try {
     const params = await context.params;
     const { code } = params;
     const body = await req.json();
     const { enabled } = body;
 
-    const pool = await connectPostgres();
+    pool = await connectPostgres();
     await pool.query('UPDATE stocks SET enabled=$1 WHERE code=$2', [enabled, code]);
-    await pool.end();
 
     return NextResponse.json({ success: true, message: '종목 상태가 변경되었습니다' });
   } catch (error) {
-    console.error('❌ 종목 상태 변경 실패:', error);
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+  } finally {
+    if (pool) {
+      try {
+        await pool.end();
+      } catch (e) {
+        // 무시
+      }
+    }
   }
 }
 
 // DELETE: 종목 삭제
 export async function DELETE(req: NextRequest, context: { params: Promise<{ code: string }> }) {
+  let pool: any = null;
   try {
     const params = await context.params;
     const { code } = params;
 
-    const pool = await connectPostgres();
+    pool = await connectPostgres();
     await pool.query('DELETE FROM stocks WHERE code=$1', [code]);
-    await pool.end();
 
     return NextResponse.json({ success: true, message: '종목이 삭제되었습니다' });
   } catch (error) {
-    console.error('❌ 종목 삭제 실패:', error);
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+  } finally {
+    if (pool) {
+      try {
+        await pool.end();
+      } catch (e) {
+        // 무시
+      }
+    }
   }
 }

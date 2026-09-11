@@ -381,30 +381,61 @@ export class KISApi {
   }
 
   /**
+   * 현재 시간에 맞는 거래소 선택 (KRX 정규장 vs NXT 야시장)
+   */
+  private getExchangeCode(): string {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const dayOfWeek = now.getDay();
+
+    // 평일(월~금: 1~5) 정규장 시간 확인
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+      // 09:00 ~ 15:30 = 정규장 (KRX)
+      if ((hours === 9 && minutes >= 0) || (hours > 9 && hours < 15) || (hours === 15 && minutes <= 30)) {
+        return 'KRX';
+      }
+    }
+
+    // 그 외: 야시장 (NXT)
+    return 'NXT';
+  }
+
+  /**
    * 시장가 매수
    */
   async buy(code: string, quantity: number): Promise<any> {
     try {
-      const headers = await this.getHeaders('TTTC0802U');
-      const accountId = process.env.KIS_ACCOUNT || '';
-      const [cano, acntPrdtCd] = accountId.split('-');
+      const headers = await this.getHeaders('TTTC0012U');
+      const cano = this.accountId.split('-')[0];
+      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+      const exchange = this.getExchangeCode();
+
+      console.log(`📊 매수 주문: ${code} x ${quantity}주 (거래소: ${exchange})`);
 
       const response = await this.client.post(
         '/uapi/domestic-stock/v1/trading/order-cash',
         {
           CANO: cano,
-          ACNT_PRDT_CD: acntPrdtCd || '01',
+          ACNT_PRDT_CD: acntPrdtCd,
           PDNO: code,
-          ORD_DVSN_CD: '01', // 시장가
+          ORD_DVSN: '01',
           ORD_QTY: quantity.toString(),
           ORD_UNPR: '0',
+          EXCG_ID_DVSN_CD: exchange,
         },
         { headers }
       );
 
+      if (response.data.rt_cd !== '0') {
+        throw new Error(`매수 실패: ${response.data.msg1}`);
+      }
+
+      console.log(`✅ 매수 주문 성공 (${code}): 주문번호=${response.data.output?.order_number}`);
       return response.data;
-    } catch (error) {
-      console.error(`매수 주문 실패 (${code}):`, error);
+    } catch (error: any) {
+      const msg = error?.response?.data?.msg1 || error?.message;
+      console.error(`❌ 매수 주문 실패 (${code}): ${msg}`);
       throw error;
     }
   }
@@ -414,27 +445,36 @@ export class KISApi {
    */
   async sell(code: string, quantity: number): Promise<any> {
     try {
-      const headers = await this.getHeaders('TTTC0801U');
-      const accountId = process.env.KIS_ACCOUNT || '';
-      const [cano, acntPrdtCd] = accountId.split('-');
+      const headers = await this.getHeaders('TTTC0011U');
+      const cano = this.accountId.split('-')[0];
+      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+      const exchange = this.getExchangeCode();
+
+      console.log(`📊 매도 주문: ${code} x ${quantity}주 (거래소: ${exchange})`);
 
       const response = await this.client.post(
         '/uapi/domestic-stock/v1/trading/order-cash',
         {
           CANO: cano,
-          ACNT_PRDT_CD: acntPrdtCd || '01',
+          ACNT_PRDT_CD: acntPrdtCd,
           PDNO: code,
-          ORD_DVSN_CD: '01', // 시장가
+          ORD_DVSN: '01',
           ORD_QTY: quantity.toString(),
           ORD_UNPR: '0',
-          ORD_GBN_CD: '02', // 매도
+          EXCG_ID_DVSN_CD: exchange,
         },
         { headers }
       );
 
+      if (response.data.rt_cd !== '0') {
+        throw new Error(`매도 실패: ${response.data.msg1}`);
+      }
+
+      console.log(`✅ 매도 주문 성공 (${code}): 주문번호=${response.data.output?.order_number}`);
       return response.data;
-    } catch (error) {
-      console.error(`매도 주문 실패 (${code}):`, error);
+    } catch (error: any) {
+      const msg = error?.response?.data?.msg1 || error?.message;
+      console.error(`❌ 매도 주문 실패 (${code}): ${msg}`);
       throw error;
     }
   }

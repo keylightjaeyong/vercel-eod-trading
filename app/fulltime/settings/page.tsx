@@ -76,10 +76,13 @@ export default function SettingsPage() {
       });
 
       if (!response.ok) throw new Error('설정 저장 실패');
-      await fetchSettings();
+      // ✅ 저장 성공 → 로컬 상태 유지, 새로고침 버튼으로만 데이터베이스 재조회
       setError(null);
+      alert('✅ 설정이 저장되었습니다');
+      console.log('✅ 설정 저장 성공:', settings);
     } catch (err) {
       setError(err instanceof Error ? err.message : '알 수 없는 오류');
+      console.error('❌ 설정 저장 실패:', err);
     } finally {
       setSaving(false);
     }
