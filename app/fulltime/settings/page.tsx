@@ -112,19 +112,28 @@ export default function SettingsPage() {
       const newEnabled = !settings?.enabled;
       console.log('📤 거래 토글 요청:', { newEnabled });
 
-      const response = await fetch('/api/fulltime/trading/toggle', {
+      // 전체 config 구조로 작성
+      const configToSave = {
+        global_settings: {
+          ...settings,
+          enabled: newEnabled,
+        },
+        stocks: [],
+      };
+
+      const response = await fetch('/api/fulltime/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: newEnabled }),
+        body: JSON.stringify(configToSave),
       });
 
       if (!response.ok) throw new Error('거래 제어 실패');
       const data = await response.json();
       console.log('✅ 거래 토글 응답:', data);
 
-      // 즉시 설정 새로고침 (Heroku와 동기화)
+      // 설정 새로고침
       console.log('🔄 설정 새로고침 중...');
-      await new Promise(resolve => setTimeout(resolve, 500)); // 0.5초 대기
+      await new Promise(resolve => setTimeout(resolve, 500));
       await fetchSettings();
       console.log('✅ 설정 동기화 완료');
 

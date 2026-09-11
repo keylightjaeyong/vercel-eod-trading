@@ -12,10 +12,14 @@ async function connectPostgres() {
 // GET: 설정 조회
 export async function GET(req: NextRequest) {
   try {
+    console.log(`🔌 DATABASE_URL: ${process.env.DATABASE_URL?.substring(0, 60)}...`);
     const pool = await connectPostgres();
+    console.log('✅ Postgres 연결 성공');
 
     try {
+      console.log('📖 설정 조회 중...');
       const result = await pool.query('SELECT config_json FROM trading_config WHERE id = 1');
+      console.log(`✅ 데이터 조회: ${result.rows.length}행`);
       await pool.end();
 
       if (result.rows.length > 0) {
