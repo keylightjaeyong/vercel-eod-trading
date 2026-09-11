@@ -98,50 +98,70 @@ export async function POST(req: NextRequest) {
 
         console.log(`   현재가: ${currentPrice.toLocaleString()}원`);
 
-        // 보유 시간 계산
-        const entryDate = new Date(entry_time);
-        const holdTimeMs = Date.now() - entryDate.getTime();
-        const holdTimeHours = holdTimeMs / (60 * 60 * 1000);
-
         // 수익률 계산
         const profitPct =
           ((currentPrice - entry_price) / entry_price) * 100;
 
-        console.log(
-          `   수익률: ${profitPct.toFixed(2)}% | 보유시간: ${holdTimeHours.toFixed(1)}시간`
-        );
+        console.log(`   수익률: ${profitPct.toFixed(2)}%`);
+
+        // 최근 10개 가격 이력 조회 (어깨 탐색용)
+        let recentPrices: number[] = [currentPrice];
+        try {
+          const priceHistoryResult = await pool.query(
+            `SELECT close FROM price_snapshots
+             WHERE code = $1
+             ORDER BY timestamp DESC
+             LIMIT 10`,
+            [code]
+          );
+          if (priceHistoryResult.rows.length > 0) {
+            const prices = priceHistoryResult.rows
+              .reverse()
+              .map(r => parseFloat(r.close));
+            recentPrices = [...prices, currentPrice];
+          }
+        } catch (err) {
+          console.log(`⚠️ 가격 이력 조회 실패`);
+        }
 
         // 매도 신호 판정
         let shouldSell = false;
         let sellReason = '';
-        let sellPrice = 0;
+        let sellPrice = currentPrice;
 
-        // 1️⃣ 목표가 달성
-        if (
-          profitPct >= (sellConfig.target_profit_pct || 2.0)
-        ) {
+        // 1️⃣ 10봉(50분) 내 어깨 감지 → 즉시 매도
+        const entryPriceIndex = Math.max(0, recentPrices.length - 11);
+        const kneeIndex = entryPriceIndex;
+        const shoulderIndex = KneeShoulderPattern.detectShoulder(
+          recentPrices,
+          kneeIndex,
+          entry_price,
+          10 // 10봉 탐색
+        );
+
+        if (shoulderIndex !== null && shoulderIndex > kneeIndex) {
           shouldSell = true;
-          sellReason = `목표 수익 ${sellConfig.target_profit_pct}% 달성`;
-          sellPrice = currentPrice;
-          console.log(`✅ 목표가 도달: ${sellReason}`);
+          sellReason = `어깨 패턴 감지 (10봉 내 반등)`;
+          console.log(`👉 ${sellReason}`);
         }
-        // 2️⃣ 손절매
-        else if (
-          profitPct <= -(sellConfig.stop_loss_pct || 5.0)
-        ) {
+
+        // 2️⃣ -3% 손실 시 손절매
+        if (!shouldSell && profitPct <= -3.0) {
           shouldSell = true;
-          sellReason = `손절매 기준 ${sellConfig.stop_loss_pct}% 손실`;
-          sellPrice = currentPrice;
-          console.log(`⛔ 손절매: ${sellReason}`);
+          sellReason = `-3% 손절매 (현재: ${profitPct.toFixed(2)}%)`;
+          console.log(`⛔ ${sellReason}`);
         }
-        // 3️⃣ 시간 초과
-        else if (
-          holdTimeHours >= (sellConfig.max_hold_hours || 24)
-        ) {
-          shouldSell = true;
-          sellReason = `${sellConfig.max_hold_hours}시간 보유 완료`;
-          sellPrice = currentPrice;
-          console.log(`⏰ 시간 초과: ${sellReason}`);
+
+        // 3️⃣ 동적 손절매: 최고가에서 -20% 손실
+        if (!shouldSell && recentPrices.length > 1) {
+          const highestPrice = Math.max(...recentPrices);
+          const dynamicStopLoss = highestPrice * 0.8; // 최고가에서 -20%
+
+          if (currentPrice <= dynamicStopLoss) {
+            shouldSell = true;
+            sellReason = `동적 손절매 (최고가 ${highestPrice.toLocaleString()}에서 -20%)`;
+            console.log(`⛔ ${sellReason}`);
+          }
         }
 
         if (shouldSell) {
@@ -171,7 +191,6 @@ export async function POST(req: NextRequest) {
                       sellReason,
                       profitPct: profitPct.toFixed(2),
                       entryPrice: entry_price,
-                      holdTimeHours: holdTimeHours.toFixed(2),
                     }),
                   ]
                 );
@@ -188,7 +207,6 @@ export async function POST(req: NextRequest) {
                 entryPrice: entry_price,
                 sellPrice,
                 profitPct: profitPct.toFixed(2),
-                holdTimeHours: holdTimeHours.toFixed(1),
                 sellReason,
                 status: '✅ 매도 완료',
               });
@@ -211,7 +229,6 @@ export async function POST(req: NextRequest) {
             currentPrice,
             entryPrice: entry_price,
             profitPct: profitPct.toFixed(2),
-            holdTimeHours: holdTimeHours.toFixed(1),
             status: '⏳ 보유 중',
           });
         }
