@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
           trailing_stop_loss_pct: 0.2,
           search_candles_limit: 10,
           test_mode: false,
-          enabled: true,
+          enabled: tradingEnabled,
         },
         stocks: [
           { code: '000660', name: 'SK하이닉스', enabled: true, allocation_pct: 50 },
@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error('❌ 설정 조회 실패:', error);
+    const tradingEnabled = process.env.TRADING_ENABLED !== 'false';
     return NextResponse.json({
       success: true,
       data: {
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
           trailing_stop_loss_pct: 0.2,
           search_candles_limit: 10,
           test_mode: false,
-          enabled: true,
+          enabled: tradingEnabled,
         },
         stocks: [
           { code: '000660', name: 'SK하이닉스', enabled: true, allocation_pct: 50 },
@@ -136,7 +137,12 @@ export async function POST(req: NextRequest) {
         message: dbError.message,
         code: dbError.code,
         detail: dbError.detail,
-        stack: dbError.stack?.split('\n')[0]
+        severity: dbError.severity,
+        position: dbError.position,
+        line: dbError.line,
+        routine: dbError.routine,
+        file: dbError.file,
+        stack: dbError.stack?.split('\n').slice(0, 3).join(' | ')
       });
     }
 
