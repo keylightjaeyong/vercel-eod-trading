@@ -12,13 +12,19 @@ async function connectPostgres() {
 
 export async function POST(req: NextRequest) {
   console.log('🔄 자동 거래 시작 (Heroku에서 호출됨)');
+
+  // 환경변수에서 거래 활성화 상태 확인
+  const rawValue = process.env.TRADING_ENABLED;
+  const tradingEnabled = rawValue !== 'false';
+  console.log('📋 환경변수 TRADING_ENABLED (RAW):', JSON.stringify(rawValue), '→ type:', typeof rawValue, '→ enabled:', tradingEnabled);
+
   const pool = await connectPostgres();
 
   try {
-    // 1. 설정 조회 (없으면 기본값 사용)
-    let config = {
+    // 1. 설정 조회
+    let config: any = {
       global_settings: {
-        enabled: true,
+        enabled: tradingEnabled,
         min_drop: 1.0,
         min_rise: 0.5,
         search_window: 10,
@@ -32,10 +38,19 @@ export async function POST(req: NextRequest) {
       );
 
       if (configResult.rows.length > 0) {
-        config = JSON.parse(configResult.rows[0].config_json);
+        const dbConfig = JSON.parse(configResult.rows[0].config_json);
+        // DB에서 min_drop 등의 설정은 읽되, enabled는 환경변수 사용
+        config = {
+          ...dbConfig,
+          global_settings: {
+            ...dbConfig.global_settings,
+            enabled: tradingEnabled,
+          },
+        };
+        console.log('✅ DB에서 설정 조회 (enabled은 환경변수 사용)');
       }
     } catch (dbErr: any) {
-      console.log('⚠️ trading_config 테이블 없음, 기본값 사용');
+      console.log('⚠️ DB 조회 실패, 환경변수 기본값 사용');
     }
 
     const { enabled } = config.global_settings;
