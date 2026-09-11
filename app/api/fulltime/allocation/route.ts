@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { KISApi } from '@/lib/kis/api';
 
 async function connectPostgres() {
   const { Pool } = await import('pg');
@@ -12,6 +13,22 @@ async function connectPostgres() {
 // GET: 할당 데이터 조회
 export async function GET(req: NextRequest) {
   try {
+    // 1. KIS API에서 실제 잔고 조회
+    let total_capital = 300000;
+
+    try {
+      const kis = new KISApi();
+      kis.updateEnv();
+
+      console.log('📊 KIS API에서 계좌 정보 조회 중...');
+      const accountData = await kis.getAccount();
+
+      total_capital = accountData.balance + accountData.evaluating;
+      console.log(`✅ KIS API 조회 성공: ${total_capital.toLocaleString()}원`);
+    } catch (kisError: any) {
+      console.warn(`⚠️ KIS API 조회 실패: ${kisError.message}, 기본값 사용`);
+    }
+
     const pool = await connectPostgres();
 
     const result = await pool.query('SELECT code, name, allocation_pct FROM stocks WHERE enabled=true ORDER BY allocation_pct DESC');
@@ -25,7 +42,7 @@ export async function GET(req: NextRequest) {
       allocations[row.code] = {
         name: row.name,
         pct: Number(pct) || 0,
-        amount: Math.round((300000 * Number(pct || 0)) / 100),
+        amount: Math.round((total_capital * Number(pct || 0)) / 100),
         current_price: 0,
         possible_quantity: 0,
       };
@@ -35,14 +52,14 @@ export async function GET(req: NextRequest) {
       allocations['000660'] = {
         name: 'SK하이닉스',
         pct: 50,
-        amount: 150000,
+        amount: Math.round((total_capital * 50) / 100),
         current_price: 0,
         possible_quantity: 0,
       };
       allocations['005930'] = {
         name: '삼성전자',
         pct: 30,
-        amount: 90000,
+        amount: Math.round((total_capital * 30) / 100),
         current_price: 0,
         possible_quantity: 0,
       };
@@ -50,26 +67,28 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { total_capital: 300000, allocations },
+      data: { total_capital, allocations },
     });
   } catch (error) {
     console.error('❌ 할당 조회 실패:', error);
+
+    const total_capital = 300000;
     return NextResponse.json({
       success: true,
       data: {
-        total_capital: 300000,
+        total_capital,
         allocations: {
           '000660': {
             name: 'SK하이닉스',
             pct: 50,
-            amount: 150000,
+            amount: Math.round((total_capital * 50) / 100),
             current_price: 0,
             possible_quantity: 0,
           },
           '005930': {
             name: '삼성전자',
             pct: 30,
-            amount: 90000,
+            amount: Math.round((total_capital * 30) / 100),
             current_price: 0,
             possible_quantity: 0,
           },
