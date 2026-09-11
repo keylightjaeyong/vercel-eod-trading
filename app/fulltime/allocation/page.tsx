@@ -176,7 +176,9 @@ export default function AllocationPage() {
                 // 실제 잔고가 있으면 그것을 기반으로, 없으면 설정된 자본금 기반으로 계산
                 const capital = actualBalance || totalCapital;
                 const amount = (capital * (allocations[code] || 0)) / 100;
-                const possibleQty = info.current_price ? Math.floor(amount / info.current_price) : 0;
+
+                // API에서 계산한 구매 가능 수량 사용, 없으면 로컬 계산
+                const possibleQty = info.possible_quantity ?? (info.current_price ? Math.floor(amount / info.current_price) : 0);
 
                 // 전체 잔고로 구매 가능한 최대 주수
                 const maxPossibleQty = info.current_price && actualBalance

@@ -36,34 +36,74 @@ export async function GET(req: NextRequest) {
     await pool.end();
 
     const allocations: Record<string, any> = {};
-    result.rows.forEach((row) => {
+
+    // KIS API에서 가격 조회
+    for (const row of result.rows) {
       const pct = typeof row.allocation_pct === 'string'
         ? parseFloat(row.allocation_pct)
         : (row.allocation_pct || 0);
+
+      const amount = Math.round((total_capital * Number(pct || 0)) / 100);
+      let current_price = 0;
+      let possible_quantity = 0;
+
+      // KIS API에서 현재가 조회
+      try {
+        const kis = new KISApi();
+        kis.updateEnv();
+        const priceData = await kis.getPrice(row.code, 'NX');
+        current_price = priceData.current;
+
+        // 구매 가능 수량 = 할당금액 / 현재가
+        if (current_price > 0) {
+          possible_quantity = Math.floor(amount / current_price);
+        }
+
+        console.log(`📊 [${row.name}] 현재가: ${current_price}원, 구매가능: ${possible_quantity}주`);
+      } catch (e) {
+        console.log(`⚠️ [${row.name}] 가격 조회 실패: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
       allocations[row.code] = {
         name: row.name,
         pct: Number(pct) || 0,
-        amount: Math.round((total_capital * Number(pct || 0)) / 100),
-        current_price: 0,
-        possible_quantity: 0,
+        amount,
+        current_price,
+        possible_quantity,
       };
-    });
+    }
 
     if (Object.keys(allocations).length === 0) {
-      allocations['000660'] = {
-        name: 'SK하이닉스',
-        pct: 50,
-        amount: Math.round((total_capital * 50) / 100),
-        current_price: 0,
-        possible_quantity: 0,
-      };
-      allocations['005930'] = {
-        name: '삼성전자',
-        pct: 30,
-        amount: Math.round((total_capital * 30) / 100),
-        current_price: 0,
-        possible_quantity: 0,
-      };
+      const defaultStocks = [
+        { code: '000660', name: 'SK하이닉스', pct: 50 },
+        { code: '005930', name: '삼성전자', pct: 30 },
+      ];
+
+      for (const stock of defaultStocks) {
+        const amount = Math.round((total_capital * stock.pct) / 100);
+        let current_price = 0;
+        let possible_quantity = 0;
+
+        try {
+          const kis = new KISApi();
+          kis.updateEnv();
+          const priceData = await kis.getPrice(stock.code, 'NX');
+          current_price = priceData.current;
+          if (current_price > 0) {
+            possible_quantity = Math.floor(amount / current_price);
+          }
+        } catch (e) {
+          console.log(`⚠️ [${stock.name}] 가격 조회 실패`);
+        }
+
+        allocations[stock.code] = {
+          name: stock.name,
+          pct: stock.pct,
+          amount,
+          current_price,
+          possible_quantity,
+        };
+      }
     }
 
     return NextResponse.json({
