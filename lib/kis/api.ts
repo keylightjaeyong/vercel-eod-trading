@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from 'axios';
-import { getConfigValue, setConfigValue } from '@/lib/database/supabase';
 
 interface TokenResponse {
   access_token: string;
@@ -110,21 +109,7 @@ export class KISApi {
       return this.accessToken;
     }
 
-    // 2단계: Supabase에서 유효한 캐시 토큰 확인
-    try {
-      const cachedToken = await getConfigValue('kis_token', '');
-      const cachedExpiry = await getConfigValue('kis_token_expiry', '0');
-      const expiryTime = parseInt(cachedExpiry, 10);
-
-      if (cachedToken && expiryTime && now < expiryTime - 60) {
-        console.log('✅ Supabase 캐시 토큰 사용 (유효함)');
-        this.accessToken = cachedToken;
-        this.tokenExpiry = expiryTime;
-        return this.accessToken;
-      }
-    } catch (dbError) {
-      console.warn('⚠️ Supabase 캐시 조회 실패:', dbError);
-    }
+    // 2단계: 데이터베이스 캐시 토큰 확인 (생략됨)
 
     // 3단계: 새 토큰 요청
     console.log('📝 새 토큰 요청 (캐시 없거나 만료됨)');
@@ -139,14 +124,7 @@ export class KISApi {
       this.accessToken = response.data.access_token;
       this.tokenExpiry = now + (response.data.expires_in || 3600);
 
-      // Supabase에 저장 (다른 요청에서 재사용)
-      try {
-        await setConfigValue('kis_token', this.accessToken);
-        await setConfigValue('kis_token_expiry', this.tokenExpiry.toString());
-        console.log('💾 토큰을 Supabase에 저장 완료');
-      } catch (dbError) {
-        console.warn('⚠️ Supabase 저장 실패 (진행은 계속함):', dbError);
-      }
+      // 토큰 저장 (생략됨 - 메모리 캐시만 사용)
 
       return this.accessToken;
     } catch (error: any) {

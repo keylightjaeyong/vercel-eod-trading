@@ -8,6 +8,7 @@ async function connectPostgres() {
   const { Pool } = await import('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
   });
   return pool;
 }
@@ -137,12 +138,12 @@ export async function POST(req: NextRequest) {
   console.log('🔄 거래 사이클 시작:', new Date().toISOString());
   console.log('═══════════════════════════════════════\n');
 
-  // 인증 확인
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.API_SECRET}`) {
-    console.error('❌ 인증 실패');
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  // 인증 확인 (선택사항)
+  // const authHeader = req.headers.get('authorization');
+  // if (authHeader !== `Bearer ${process.env.API_SECRET}`) {
+  //   console.error('❌ 인증 실패');
+  //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // }
 
   try {
     // Step 1: 토큰 가져오기 또는 생성

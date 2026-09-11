@@ -13,6 +13,7 @@ async function connectPostgres() {
   const { Pool } = await import('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
   });
   return pool;
 }
