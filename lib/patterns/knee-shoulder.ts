@@ -174,10 +174,10 @@ export class KneeShoulderPattern {
   ): TradeSignal {
     // 기본 설정값
     const defaultConfig: PatternConfig = {
-      min_drop_pct: 2.0,
+      min_drop_pct: 0,
       min_rise_pct: 1.0,
       search_window: 10,
-      confidence_threshold: 75,
+      confidence_threshold: 70,
       max_history_points: 30,
       trailing_stop_loss_pct: 0.2,
       stop_loss_multiplier: 0.2,
@@ -209,11 +209,11 @@ export class KneeShoulderPattern {
       };
     }
 
-    // 낙폭 확인
-    if ((pattern.dropPct || 0) < finalConfig.min_drop_pct) {
+    // 낙폭 확인 (> 비교: 설정값보다 커야 함)
+    if (!((pattern.dropPct || 0) > finalConfig.min_drop_pct)) {
       return {
         signal: 'WAIT',
-        reason: `낙폭 부족 (${pattern.dropPct?.toFixed(2)}% < ${finalConfig.min_drop_pct}%)`,
+        reason: `낙폭 부족 (${pattern.dropPct?.toFixed(2)}% <= ${finalConfig.min_drop_pct}%)`,
         confidence: pattern.confidence,
         pattern,
       };

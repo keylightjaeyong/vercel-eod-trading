@@ -12,14 +12,28 @@ async function connectPostgres() {
 }
 
 export async function POST(req: NextRequest) {
-  console.log('🔄 자동 거래 시작 (Heroku에서 호출됨)');
+  console.log('🔄 자동 거래 시작 (5분 주기: 08:00-20:00)');
+
+  const pool = await connectPostgres();
+
+  // 🕐 실행 시간 확인 (08:00-20:00만)
+  const now = new Date();
+  const hour = now.getHours();
+
+  if (hour < 8 || hour >= 20) {
+    console.log(`⏸️ 거래 시간 아님 (현재: ${hour}:${String(now.getMinutes()).padStart(2, '0')} - 08:00-20:00만 실행)`);
+    await pool.end();
+    return NextResponse.json({
+      success: true,
+      message: '거래 시간 아님 (08:00-20:00만 실행)',
+      results: [],
+    });
+  }
 
   // 환경변수에서 거래 활성화 상태 확인
   const rawValue = process.env.TRADING_ENABLED;
   const tradingEnabled = rawValue !== 'false';
   console.log('📋 환경변수 TRADING_ENABLED (RAW):', JSON.stringify(rawValue), '→ type:', typeof rawValue, '→ enabled:', tradingEnabled);
-
-  const pool = await connectPostgres();
 
   try {
     // 1. 설정 조회

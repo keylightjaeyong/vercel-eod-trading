@@ -20,20 +20,20 @@ async function connectPostgres() {
  * 보유 포지션의 매도 신호 판정
  */
 export async function POST(req: NextRequest) {
-  console.log('📤 매도 처리 시작 (5분 주기: 09:00-20:00)');
+  console.log('📤 매도 처리 시작 (5분 주기: 08:00-20:00)');
 
   const pool = await connectPostgres();
 
-  // 🕐 실행 시간 확인 (09:00-20:00만)
+  // 🕐 실행 시간 확인 (08:00-20:00만)
   const now = new Date();
   const hour = now.getHours();
 
-  if (hour < 9 || hour >= 20) {
-    console.log(`⏸️ 거래 시간 아님 (현재: ${hour}:${String(now.getMinutes()).padStart(2, '0')} - 09:00-20:00만 실행)`);
+  if (hour < 8 || hour >= 20) {
+    console.log(`⏸️ 거래 시간 아님 (현재: ${hour}:${String(now.getMinutes()).padStart(2, '0')} - 08:00-20:00만 실행)`);
     await pool.end();
     return NextResponse.json({
       success: true,
-      message: '거래 시간 아님 (09:00-20:00만 실행)',
+      message: '거래 시간 아님 (08:00-20:00만 실행)',
       results: [],
     });
   }
