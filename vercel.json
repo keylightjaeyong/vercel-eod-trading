@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/cron/sell",
-      "schedule": "0 6-15 * * 1-5"
+      "schedule": "*/5 * * * *"
     }
   ],
   "buildCommand": "npm run build",
