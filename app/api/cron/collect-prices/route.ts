@@ -59,19 +59,12 @@ export async function POST(req: NextRequest) {
 
         console.log(`📈 [${name}] 현재가: ${currentPrice.toLocaleString()}원`);
 
-        // price_snapshots에 저장
+        // price_snapshots에 저장 (현재 close 가격만 필수)
         await pool.query(
           `INSERT INTO price_snapshots
-           (code, timestamp, open, high, low, close, volume, created_at)
-           VALUES ($1, NOW(), $2, $3, $4, $5, $6, NOW())`,
-          [
-            code,
-            priceData.open || currentPrice,
-            priceData.high || currentPrice,
-            priceData.low || currentPrice,
-            currentPrice,
-            priceData.volume || 0,
-          ]
+           (code, timestamp, close, created_at)
+           VALUES ($1, NOW(), $2, NOW())`,
+          [code, currentPrice]
         );
 
         successCount++;
