@@ -13,6 +13,16 @@ export async function POST(req: NextRequest) {
   const pool = await connectPostgres();
 
   try {
+    // 0. trading_config 테이블 생성 (거래 설정)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trading_config (
+        id INTEGER PRIMARY KEY,
+        config_json TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ trading_config 테이블 생성/확인됨');
+
     // 1. stocks 테이블 생성 (종목 목록)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS stocks (

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import KISApi from '@/lib/kis/api';
+import { KISApi } from '@/lib/kis/api';
 
 async function connectPostgres() {
   const pool = new Pool({
@@ -10,193 +10,192 @@ async function connectPostgres() {
   return pool;
 }
 
-// V자 패턴 분석
-function analyzeVPattern(prices: number[], config: any) {
-  if (prices.length < 3) return { signal: null };
-
-  const n = prices.length;
-  const minDropPct = config.min_drop || 1.0;
-  const minRisePct = config.min_rise || 0.5;
-  const searchWindow = config.search_window || 10;
-
-  // 최근 N개 봉에서 최고가/최저가 찾기
-  const recentPrices = prices.slice(Math.max(0, n - searchWindow));
-  const maxPrice = Math.max(...recentPrices);
-  const minPrice = Math.min(...recentPrices);
-  const currentPrice = prices[n - 1];
-
-  // 낙폭 계산
-  const dropPct = ((maxPrice - minPrice) / maxPrice) * 100;
-
-  // 상승폭 계산 (최저가에서 현재가까지)
-  const risePct = ((currentPrice - minPrice) / minPrice) * 100;
-
-  // V자 신호 확인
-  if (dropPct >= minDropPct && risePct >= minRisePct) {
-    return {
-      signal: 'BUY',
-      dropPct: dropPct.toFixed(2),
-      risePct: risePct.toFixed(2),
-      price: currentPrice,
-    };
-  }
-
-  return { signal: null };
-}
-
-// 거래 실행
-async function executeTrades() {
+export async function POST(req: NextRequest) {
+  console.log('🔄 자동 거래 시작 (Heroku에서 호출됨)');
   const pool = await connectPostgres();
-  let successCount = 0;
-  let errorCount = 0;
-  const trades: any[] = [];
 
   try {
-    // 1. 설정 조회
-    const configResult = await pool.query(
-      'SELECT config_json FROM trading_config WHERE id = 1'
-    );
+    // 1. 설정 조회 (없으면 기본값 사용)
+    let config = {
+      global_settings: {
+        enabled: true,
+        min_drop: 1.0,
+        min_rise: 0.5,
+        search_window: 10,
+      },
+      stocks: [],
+    };
 
-    if (configResult.rows.length === 0) {
-      return { success: false, error: '설정을 찾을 수 없습니다' };
+    try {
+      const configResult = await pool.query(
+        'SELECT config_json FROM trading_config WHERE id = 1'
+      );
+
+      if (configResult.rows.length > 0) {
+        config = JSON.parse(configResult.rows[0].config_json);
+      }
+    } catch (dbErr: any) {
+      console.log('⚠️ trading_config 테이블 없음, 기본값 사용');
     }
 
-    const config = JSON.parse(configResult.rows[0].config_json);
-    const { enabled, min_drop, min_rise, search_window } =
-      config.global_settings;
+    const { enabled } = config.global_settings;
 
-    // 거래 비활성화 확인
     if (!enabled) {
-      console.log('⏸️ 거래가 비활성화되었습니다');
+      console.log('⏸️ 거래 비활성화됨');
       await pool.end();
-      return { success: true, message: '거래 비활성화됨', trades: [] };
+      return NextResponse.json({ success: true, message: '거래 비활성화' });
     }
 
     // 2. 종목 조회
     const stocksResult = await pool.query(
-      'SELECT code, name FROM stocks WHERE enabled = true'
+      'SELECT code, name FROM stocks WHERE enabled = true LIMIT 10'
     );
 
     if (stocksResult.rows.length === 0) {
-      console.log('📭 활성화된 종목이 없습니다');
+      console.log('📭 활성화된 종목 없음');
       await pool.end();
-      return { success: true, message: '활성화된 종목 없음', trades: [] };
+      return NextResponse.json({ success: true, message: '종목 없음' });
     }
 
-    console.log(`🚀 거래 시작: ${stocksResult.rows.length}개 종목 분석`);
+    console.log(`🚀 거래 시작: ${stocksResult.rows.length}개 종목`);
 
     // 3. KIS API 초기화
     const kis = new KISApi();
+    kis.updateEnv();
 
-    // 4. 각 종목별 거래 실행
-    const tradePromises = stocksResult.rows.map(async (stock: any) => {
+    let buyCount = 0;
+    let errorCount = 0;
+    const results: any[] = [];
+    const { min_drop } = config.global_settings;
+
+    // 4. 각 종목별 매수/매도 로직
+    for (const stock of stocksResult.rows) {
       try {
         const { code, name } = stock;
 
-        // 종목 코드 변환
-        const exchangeCode = kis.getExchangeCode(code);
-
         // 가격 조회
-        const priceData = await kis.getPrice(code, exchangeCode);
+        const priceData = await kis.getPrice(code, 'NX');
+        const currentPrice = priceData.current;
 
-        if (!priceData || priceData.length === 0) {
-          console.log(`⚠️ [${name}] 가격 데이터 없음`);
-          return { code, name, signal: null, error: '가격 조회 실패' };
+        console.log(`📊 [${name}] 현재가: ${currentPrice}`);
+
+        // 이전 가격 조회
+        let previousPrice = currentPrice;
+        try {
+          const priceHistoryResult = await pool.query(
+            `SELECT price FROM trade_history
+             WHERE code = $1 AND action = 'BUY'
+             ORDER BY created_at DESC LIMIT 1`,
+            [code]
+          );
+          if (priceHistoryResult.rows.length > 0) {
+            previousPrice = priceHistoryResult.rows[0].price;
+          }
+        } catch {
+          console.log(`⚠️ [${name}] 이전 가격 조회 실패`);
         }
 
-        // V자 패턴 분석
-        const analysis = analyzeVPattern(priceData, config.global_settings);
+        // 낙폭 계산
+        const dropPct = ((previousPrice - currentPrice) / previousPrice) * 100;
+        const shouldBuy = dropPct >= (min_drop || 1.0);
 
-        if (analysis.signal === 'BUY') {
-          console.log(
-            `📈 [${name}] V자 신호 감지! 낙폭: ${analysis.dropPct}%, 상승폭: ${analysis.risePct}%`
-          );
+        console.log(
+          `📈 [${name}] 낙폭: ${dropPct.toFixed(2)}% (기준: ${min_drop}%)`
+        );
 
-          // 계좌 잔고 조회
-          const account = await kis.getAccount();
-          const availableCash = account.cash || 0;
+        if (shouldBuy) {
+          console.log(`🎯 [${name}] 매수 신호 감지!`);
 
-          // 매수 가능 수량 계산 (잔고의 10% 사용)
-          const tradeAmount = availableCash * 0.1;
-          const quantity = Math.floor(tradeAmount / analysis.price);
-
-          if (quantity > 0) {
-            // 매수 주문
-            const orderResult = await kis.buy(code, quantity, analysis.price);
+          try {
+            // 매수 실행
+            const quantity = 1; // 기본 1주
+            const orderResult = await kis.buy(code, quantity);
 
             if (orderResult) {
               console.log(
-                `✅ [${name}] 매수 완료: ${quantity}주 @ ${analysis.price}`
+                `✅ [${name}] 매수 완료: ${quantity}주 @ ${currentPrice}`
               );
 
               // 거래 이력 저장
-              await pool.query(
-                `INSERT INTO trade_history
-                 (code, name, action, quantity, price, analysis, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-                [
-                  code,
-                  name,
-                  'BUY',
-                  quantity,
-                  analysis.price,
-                  JSON.stringify(analysis),
-                ]
-              );
+              try {
+                await pool.query(
+                  `INSERT INTO trade_history (code, name, action, quantity, price, analysis, created_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+                  [
+                    code,
+                    name,
+                    'BUY',
+                    quantity,
+                    currentPrice,
+                    JSON.stringify({
+                      dropPct: dropPct.toFixed(2),
+                      previousPrice,
+                    }),
+                  ]
+                );
+              } catch (saveErr: any) {
+                console.log(`⚠️ [${name}] 이력 저장 실패: ${saveErr.message}`);
+              }
 
-              successCount++;
-              return { code, name, signal: 'BUY', quantity, price: analysis.price, status: '매수 완료' };
+              buyCount++;
+              results.push({
+                code,
+                name,
+                action: 'BUY',
+                quantity,
+                price: currentPrice,
+                dropPct: dropPct.toFixed(2),
+                status: '✅ 매수 완료',
+              });
             }
-          } else {
-            console.log(`💰 [${name}] 잔고 부족 (필요: ${tradeAmount})`);
-            return { code, name, signal: 'BUY', error: '잔고 부족' };
+          } catch (buyErr: any) {
+            console.error(`❌ [${name}] 매수 실패: ${buyErr.message}`);
+            errorCount++;
+            results.push({
+              code,
+              name,
+              action: 'BUY',
+              error: buyErr.message,
+              status: '❌ 매수 실패',
+            });
           }
         } else {
-          return { code, name, signal: null };
+          console.log(
+            `⏭️ [${name}] 매수 신호 없음 (낙폭 ${dropPct.toFixed(2)}%)`
+          );
+          results.push({
+            code,
+            name,
+            price: currentPrice,
+            dropPct: dropPct.toFixed(2),
+            status: '⏭️ 신호 없음',
+          });
         }
       } catch (err: any) {
+        console.error(`❌ [${stock.name}] 처리 오류: ${err.message}`);
         errorCount++;
-        console.error(
-          `❌ [${stock.name}] 거래 실패: ${err.message}`
-        );
-        return { code: stock.code, name: stock.name, error: err.message };
+        results.push({
+          code: stock.code,
+          name: stock.name,
+          error: err.message,
+          status: '❌ 오류',
+        });
       }
-    });
-
-    // 모든 거래 병렬 실행
-    const results = await Promise.all(tradePromises);
-    trades.push(...results);
-
-    console.log(`✅ 거래 완료: 성공 ${successCount}, 실패 ${errorCount}`);
+    }
 
     await pool.end();
-    return {
+    return NextResponse.json({
       success: true,
-      message: `거래 완료: ${successCount}건 성공, ${errorCount}건 실패`,
-      trades,
-    };
+      message: `${results.length}개 종목 처리 (매수: ${buyCount}건, 오류: ${errorCount}건)`,
+      results,
+    });
   } catch (err: any) {
-    console.error('❌ 거래 실행 중 오류:', err);
+    console.error('❌ 거래 오류:', err);
     await pool.end();
-    return { success: false, error: err.message };
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    console.log('🔄 자동 거래 시작');
-    const result = await executeTrades();
-    return NextResponse.json(result);
-  } catch (err: any) {
-    console.error('❌ Cron job 오류:', err);
-    return NextResponse.json(
-      { success: false, error: err.message },
-      { status: 500 }
-    );
-  }
-}
-
-// 로컬 테스트용
 export async function GET(req: NextRequest) {
   return POST(req);
 }
