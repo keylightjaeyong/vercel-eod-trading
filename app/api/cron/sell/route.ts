@@ -24,6 +24,46 @@ export async function POST(req: NextRequest) {
 
   const pool = await connectPostgres();
 
+  try {
+    // 자동 테이블 생성
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS stocks (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(10) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        enabled BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trade_history (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(10) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        action VARCHAR(10) NOT NULL,
+        quantity INTEGER NOT NULL,
+        price DECIMAL(10, 2) NOT NULL,
+        analysis TEXT,
+        pattern_signal TEXT,
+        pattern_confidence INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (code) REFERENCES stocks(code) ON DELETE CASCADE
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS price_snapshots (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(10) NOT NULL,
+        timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        close DECIMAL(10, 2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (code) REFERENCES stocks(code) ON DELETE CASCADE
+      )
+    `);
+  } catch (err) {
+    console.log('⚠️ 테이블 생성 시도:', err);
+  }
+
   // 🕐 실행 시간 확인 (08:00-20:00만)
   const now = new Date();
   const hour = now.getHours();
