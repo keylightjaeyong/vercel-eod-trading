@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { KISApi } from '@/lib/kis/api';
+import { KneeShoulderPattern } from '@/lib/patterns/knee-shoulder';
 
 async function connectPostgres() {
   const pool = new Pool({
@@ -82,44 +83,84 @@ export async function POST(req: NextRequest) {
     let errorCount = 0;
     const results: any[] = [];
     const { min_drop } = config.global_settings;
+    const kneeConfig = config.global_settings.knee_shoulder || {};
 
     // 4. 각 종목별 매수/매도 로직
     for (const stock of stocksResult.rows) {
       try {
         const { code, name } = stock;
 
-        // 가격 조회
+        // 현재가 조회
         const priceData = await kis.getPrice(code, 'NX');
         const currentPrice = priceData.current;
 
         console.log(`📊 [${name}] 현재가: ${currentPrice}`);
 
-        // 이전 가격 조회
-        let previousPrice = currentPrice;
+        // 최근 30개 가격 이력 조회 (V자 패턴 분석용)
+        let prices: number[] = [];
         try {
           const priceHistoryResult = await pool.query(
-            `SELECT price FROM trade_history
-             WHERE code = $1 AND action = 'BUY'
-             ORDER BY created_at DESC LIMIT 1`,
+            `SELECT close FROM price_snapshots
+             WHERE code = $1
+             ORDER BY timestamp DESC
+             LIMIT 30`,
             [code]
           );
           if (priceHistoryResult.rows.length > 0) {
-            previousPrice = priceHistoryResult.rows[0].price;
+            prices = priceHistoryResult.rows
+              .reverse()
+              .map(r => parseFloat(r.close));
+            // 현재가 추가 (최신)
+            prices.push(currentPrice);
+          } else {
+            // 가격 이력 없으면 trade_history에서 조회
+            const tradeHistoryResult = await pool.query(
+              `SELECT price FROM trade_history
+               WHERE code = $1 AND action = 'BUY'
+               ORDER BY created_at DESC
+               LIMIT 1`,
+              [code]
+            );
+            if (tradeHistoryResult.rows.length > 0) {
+              prices = [
+                parseFloat(tradeHistoryResult.rows[0].price),
+                currentPrice,
+              ];
+            } else {
+              prices = [currentPrice];
+            }
           }
-        } catch {
-          console.log(`⚠️ [${name}] 이전 가격 조회 실패`);
+        } catch (err) {
+          console.log(`⚠️ [${name}] 가격 이력 조회 실패`);
+          prices = [currentPrice];
         }
 
-        // 낙폭 계산
-        const dropPct = ((previousPrice - currentPrice) / previousPrice) * 100;
-        const shouldBuy = dropPct >= (min_drop || 1.0);
-
-        console.log(
-          `📈 [${name}] 낙폭: ${dropPct.toFixed(2)}% (기준: ${min_drop}%)`
+        // V자 패턴 신호 생성
+        const signal = KneeShoulderPattern.generateTradingSignal(
+          prices,
+          kneeConfig
         );
 
+        let shouldBuy = signal.signal === 'BUY';
+
+        // 기본 낙폭률 조건도 함께 확인 (보수적 접근)
+        if (prices.length >= 2) {
+          const dropPct =
+            ((prices[prices.length - 2] - currentPrice) /
+              prices[prices.length - 2]) *
+            100;
+          console.log(
+            `📈 [${name}] 낙폭: ${dropPct.toFixed(2)}% (기준: ${min_drop}%) | 패턴: ${signal.reason}`
+          );
+
+          // 낙폭률이 기준 이상이면 추가로 매수 신호
+          if (dropPct >= (min_drop || 1.0) && signal.confidence >= 50) {
+            shouldBuy = true;
+          }
+        }
+
         if (shouldBuy) {
-          console.log(`🎯 [${name}] 매수 신호 감지!`);
+          console.log(`🎯 [${name}] 매수 신호! (신뢰도: ${signal.confidence}%)`);
 
           try {
             // 매수 실행
@@ -128,14 +169,14 @@ export async function POST(req: NextRequest) {
 
             if (orderResult) {
               console.log(
-                `✅ [${name}] 매수 완료: ${quantity}주 @ ${currentPrice}`
+                `✅ [${name}] 매수 완료: ${quantity}주 @ ${currentPrice}원`
               );
 
-              // 거래 이력 저장
+              // 거래 이력 저장 (패턴 정보 포함)
               try {
                 await pool.query(
-                  `INSERT INTO trade_history (code, name, action, quantity, price, analysis, created_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+                  `INSERT INTO trade_history (code, name, action, quantity, price, analysis, pattern_signal, pattern_confidence, created_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
                   [
                     code,
                     name,
@@ -143,9 +184,13 @@ export async function POST(req: NextRequest) {
                     quantity,
                     currentPrice,
                     JSON.stringify({
-                      dropPct: dropPct.toFixed(2),
-                      previousPrice,
+                      signal: signal.signal,
+                      reason: signal.reason,
+                      targetPrice: signal.targetPrice,
+                      stopLossPrice: signal.stopLossPrice,
                     }),
+                    signal.signal,
+                    signal.confidence,
                   ]
                 );
               } catch (saveErr: any) {
@@ -159,7 +204,9 @@ export async function POST(req: NextRequest) {
                 action: 'BUY',
                 quantity,
                 price: currentPrice,
-                dropPct: dropPct.toFixed(2),
+                signal: signal.signal,
+                confidence: signal.confidence,
+                reason: signal.reason,
                 status: '✅ 매수 완료',
               });
             }
@@ -176,13 +223,15 @@ export async function POST(req: NextRequest) {
           }
         } else {
           console.log(
-            `⏭️ [${name}] 매수 신호 없음 (낙폭 ${dropPct.toFixed(2)}%)`
+            `⏭️ [${name}] 매수 신호 없음 (${signal.reason})`
           );
           results.push({
             code,
             name,
             price: currentPrice,
-            dropPct: dropPct.toFixed(2),
+            signal: signal.signal,
+            confidence: signal.confidence,
+            reason: signal.reason,
             status: '⏭️ 신호 없음',
           });
         }

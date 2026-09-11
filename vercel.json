@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/collect-prices",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/trade",
       "schedule": "*/5 * * * *"
     },
@@ -31,6 +35,10 @@
     {
       "path": "/api/sell",
       "schedule": "30 11 * * 1-5"
+    },
+    {
+      "path": "/api/cron/sell",
+      "schedule": "0 6-15 * * 1-5"
     }
   ],
   "buildCommand": "npm run build",

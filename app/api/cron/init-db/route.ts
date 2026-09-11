@@ -45,11 +45,37 @@ export async function POST(req: NextRequest) {
         quantity INTEGER NOT NULL,
         price DECIMAL(10, 2) NOT NULL,
         analysis TEXT,
+        pattern_signal TEXT,
+        pattern_confidence INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (code) REFERENCES stocks(code) ON DELETE CASCADE
       )
     `);
     console.log('✅ trade_history 테이블 생성/확인됨');
+
+    // 2-1. price_snapshots 테이블 생성 (5분마다 가격 저장)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS price_snapshots (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(10) NOT NULL,
+        timestamp TIMESTAMP NOT NULL,
+        open DECIMAL(10, 2),
+        high DECIMAL(10, 2),
+        low DECIMAL(10, 2),
+        close DECIMAL(10, 2) NOT NULL,
+        volume BIGINT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (code) REFERENCES stocks(code) ON DELETE CASCADE
+      )
+    `);
+    console.log('✅ price_snapshots 테이블 생성/확인됨');
+
+    // 2-2. price_snapshots 인덱스 생성 (조회 성능)
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_price_snapshots_code_time
+      ON price_snapshots(code, timestamp DESC)
+    `);
+    console.log('✅ price_snapshots 인덱스 생성/확인됨');
 
     // 3. 기본 종목 데이터 삽입 (없으면)
     const stocksCheck = await pool.query(
