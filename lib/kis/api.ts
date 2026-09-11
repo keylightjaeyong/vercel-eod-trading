@@ -109,7 +109,31 @@ export class KISApi {
       return this.accessToken;
     }
 
-    // 2단계: 데이터베이스 캐시 토큰 확인 (생략됨)
+    // 2단계: 데이터베이스 캐시 토큰 확인
+    try {
+      const { Pool } = await import('pg');
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false },
+      });
+
+      const result = await pool.query(
+        `SELECT token_value, expires_at FROM kis_tokens WHERE id = 1`
+      );
+      await pool.end();
+
+      if (result.rows.length > 0) {
+        const { token_value, expires_at } = result.rows[0];
+        if (new Date(expires_at).getTime() / 1000 > now + 60) {
+          console.log('✅ DB 캐시 토큰 사용');
+          this.accessToken = token_value;
+          this.tokenExpiry = new Date(expires_at).getTime() / 1000;
+          return token_value;
+        }
+      }
+    } catch (e) {
+      console.log('⚠️ DB 토큰 캐시 조회 실패, 신규 발급으로 진행');
+    }
 
     // 3단계: 새 토큰 요청
     console.log('📝 새 토큰 요청 (캐시 없거나 만료됨)');
@@ -124,7 +148,28 @@ export class KISApi {
       this.accessToken = response.data.access_token;
       this.tokenExpiry = now + (response.data.expires_in || 3600);
 
-      // 토큰 저장 (생략됨 - 메모리 캐시만 사용)
+      // DB에 토큰 저장
+      try {
+        const { Pool } = await import('pg');
+        const pool = new Pool({
+          connectionString: process.env.DATABASE_URL,
+          ssl: { rejectUnauthorized: false },
+        });
+
+        const expiresAt = new Date(this.tokenExpiry * 1000);
+        await pool.query(
+          `INSERT INTO kis_tokens (id, token_value, expires_at)
+           VALUES (1, $1, $2)
+           ON CONFLICT (id) DO UPDATE
+           SET token_value = $1, expires_at = $2`,
+          [this.accessToken, expiresAt]
+        );
+        await pool.end();
+
+        console.log(`💾 토큰 DB 저장: ${new Date(expiresAt).toISOString()}`);
+      } catch (e) {
+        console.log('⚠️ 토큰 DB 저장 실패 (계속 진행):', e);
+      }
 
       return this.accessToken;
     } catch (error: any) {
