@@ -35,7 +35,7 @@
     {
       "path": "/api/sell",
       "schedule": "30 11 * * 1-5"
-    },
+    }
   ],
   "buildCommand": "npm run build",
   "outputDirectory": ".next",

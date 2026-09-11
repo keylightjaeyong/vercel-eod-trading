@@ -24,23 +24,7 @@ export async function POST(req: NextRequest) {
   const pool = await connectPostgres();
 
   try {
-    // 0-1. stocks 테이블 자동 생성
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS stocks (
-          id SERIAL PRIMARY KEY,
-          code VARCHAR(10) UNIQUE NOT NULL,
-          name VARCHAR(100) NOT NULL,
-          enabled BOOLEAN DEFAULT true,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      console.log('✅ stocks 테이블 확인/생성됨');
-    } catch (err: any) {
-      console.log(`⚠️ stocks 테이블 생성 시도: ${err.message}`);
-    }
-
-    // 0-2. price_snapshots 테이블 자동 생성
+    // 0. price_snapshots 테이블 자동 생성 (Foreign Key 제거)
     try {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS price_snapshots (
@@ -48,26 +32,12 @@ export async function POST(req: NextRequest) {
           code VARCHAR(10) NOT NULL,
           timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
           close DECIMAL(10, 2) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (code) REFERENCES stocks(code) ON DELETE CASCADE
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
       console.log('✅ price_snapshots 테이블 확인/생성됨');
     } catch (err: any) {
-      console.log(`⚠️ price_snapshots 테이블 생성 시도: ${err.message}`);
-    }
-
-    // 0-3. 기본 종목 자동 삽입 (없으면)
-    try {
-      await pool.query(`
-        INSERT INTO stocks (code, name, enabled) VALUES
-        ('005930', '삼성전자', true),
-        ('000660', 'SK하이닉스', true)
-        ON CONFLICT (code) DO NOTHING
-      `);
-      console.log('✅ 기본 종목 확인/삽입됨');
-    } catch (err: any) {
-      console.log(`⚠️ 기본 종목 삽입 시도: ${err.message}`);
+      console.error(`❌ price_snapshots 테이블 생성 실패: ${err.message}`);
     }
 
     // 1. 활성화된 종목 조회
