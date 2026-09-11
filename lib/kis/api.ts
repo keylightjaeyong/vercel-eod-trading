@@ -118,17 +118,17 @@ export class KISApi {
       });
 
       const result = await pool.query(
-        `SELECT token_value, expires_at FROM kis_tokens WHERE id = 1`
+        `SELECT access_token, expires_at FROM kis_tokens WHERE id = 1`
       );
       await pool.end();
 
       if (result.rows.length > 0) {
-        const { token_value, expires_at } = result.rows[0];
-        if (new Date(expires_at).getTime() / 1000 > now + 60) {
+        const { access_token, expires_at } = result.rows[0];
+        if (expires_at > now + 60) {
           console.log('✅ DB 캐시 토큰 사용');
-          this.accessToken = token_value;
-          this.tokenExpiry = new Date(expires_at).getTime() / 1000;
-          return token_value;
+          this.accessToken = access_token;
+          this.tokenExpiry = expires_at;
+          return access_token;
         }
       }
     } catch (e) {
@@ -156,17 +156,16 @@ export class KISApi {
           ssl: { rejectUnauthorized: false },
         });
 
-        const expiresAt = new Date(this.tokenExpiry * 1000);
         await pool.query(
-          `INSERT INTO kis_tokens (id, token_value, expires_at)
+          `INSERT INTO kis_tokens (id, access_token, expires_at)
            VALUES (1, $1, $2)
            ON CONFLICT (id) DO UPDATE
-           SET token_value = $1, expires_at = $2`,
-          [this.accessToken, expiresAt]
+           SET access_token = $1, expires_at = $2`,
+          [this.accessToken, Math.floor(this.tokenExpiry)]
         );
         await pool.end();
 
-        console.log(`💾 토큰 DB 저장: ${new Date(expiresAt).toISOString()}`);
+        console.log(`💾 토큰 DB 저장: ${new Date(this.tokenExpiry * 1000).toISOString()}`);
       } catch (e) {
         console.log('⚠️ 토큰 DB 저장 실패 (계속 진행):', e);
       }
