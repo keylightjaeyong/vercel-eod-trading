@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     try {
       console.log('🔌 DB 연결 중...');
       const pool = await connectPostgres();
-      const config_json = JSON.stringify(body, null, 2);
+      const config_json = JSON.stringify(bodyToSave, null, 2);
       console.log('✅ DB 연결 성공, 쿼리 실행 중...');
 
       try {
