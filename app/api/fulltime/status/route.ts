@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { KISApi } from '@/lib/kis/api';
 
 /**
  * /api/fulltime/status
  * 프론트엔드에서 거래 상태 조회
- * Postgres에서 trading_status 데이터 읽기
+ * KIS API에서 실제 잔고 조회 + DB에서 설정 읽기
  */
 
 export const runtime = 'nodejs';
@@ -22,21 +23,38 @@ export async function GET(req: NextRequest) {
   try {
     const pool = await connectPostgres();
 
-    // 1. 상태 조회
-    const result = await pool.query(
-      'SELECT timestamp, total_capital FROM trading_status WHERE id = 1'
-    );
-
+    // 1. KIS API에서 실제 잔고 조회
     let total_capital = 300000;
     let timestamp = new Date().toISOString();
 
-    if (result.rows.length > 0) {
-      const row = result.rows[0];
-      timestamp = row.timestamp || timestamp;
-      total_capital = row.total_capital || 300000;
-      console.log(`✅ Status: 잔고 ${total_capital.toLocaleString()}원`);
-    } else {
-      console.log('⚠️ Status: Postgres에 데이터 없음');
+    try {
+      const kis = new KISApi();
+      kis.updateEnv();
+
+      console.log('📊 KIS API에서 계좌 정보 조회 중...');
+      const accountData = await kis.getAccount();
+
+      // 총 자산 = 현금 + 평가금액
+      total_capital = accountData.balance + accountData.evaluating;
+      console.log(`✅ KIS API 조회 성공: ${total_capital.toLocaleString()}원 (현금: ${accountData.balance.toLocaleString()}원 + 평가: ${accountData.evaluating.toLocaleString()}원)`);
+    } catch (kisError: any) {
+      console.warn(`⚠️ KIS API 조회 실패: ${kisError.message}, 기본값 사용`);
+
+      // KIS 실패 시 DB에서 읽기
+      try {
+        const result = await pool.query(
+          'SELECT timestamp, total_capital FROM trading_status WHERE id = 1'
+        );
+
+        if (result.rows.length > 0) {
+          const row = result.rows[0];
+          timestamp = row.timestamp || timestamp;
+          total_capital = row.total_capital || 300000;
+          console.log(`✅ DB에서 잔고 조회: ${total_capital.toLocaleString()}원`);
+        }
+      } catch (dbError) {
+        console.log('⚠️ DB 조회도 실패, 기본값 사용');
+      }
     }
 
     // 2. 활성화된 종목 수 조회
