@@ -141,25 +141,35 @@ export async function POST(req: NextRequest) {
 
         if (shoulderIndex !== null && shoulderIndex > kneeIndex) {
           shouldSell = true;
-          sellReason = `어깨 패턴 감지 (10봉 내 반등)`;
+          sellReason = `어깨 패턴 감지 (10봉 내 반등) → 즉시 매도`;
           console.log(`👉 ${sellReason}`);
         }
 
         // 2️⃣ -3% 손실 시 손절매
         if (!shouldSell && profitPct <= -3.0) {
           shouldSell = true;
-          sellReason = `-3% 손절매 (현재: ${profitPct.toFixed(2)}%)`;
+          sellReason = `-3% 손절매`;
           console.log(`⛔ ${sellReason}`);
         }
 
-        // 3️⃣ 동적 손절매: 최고가에서 -20% 손실
+        // 3️⃣ 동적 손절매: 최고가에서 올라간 수익의 20% 손실 시
         if (!shouldSell && recentPrices.length > 1) {
           const highestPrice = Math.max(...recentPrices);
-          const dynamicStopLoss = highestPrice * 0.8; // 최고가에서 -20%
+
+          // 진입 이후 올라간 수익
+          const profitFromEntry = highestPrice - entry_price;
+
+          // 최고가에서 수익의 20% 손실 후 손절
+          const dynamicStopLoss = Math.max(
+            entry_price, // 항상 진입가 이상
+            highestPrice - profitFromEntry * 0.2
+          );
 
           if (currentPrice <= dynamicStopLoss) {
+            const lossFromHighest =
+              ((highestPrice - currentPrice) / highestPrice) * 100;
             shouldSell = true;
-            sellReason = `동적 손절매 (최고가 ${highestPrice.toLocaleString()}에서 -20%)`;
+            sellReason = `동적 손절 (최고가 ${highestPrice.toLocaleString()}에서 수익의 20% 손실)`;
             console.log(`⛔ ${sellReason}`);
           }
         }
