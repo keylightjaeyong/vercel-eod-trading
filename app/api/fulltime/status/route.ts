@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
       console.log('📊 KIS API에서 계좌 정보 조회 중...');
       const accountData = await kis.getAccount();
 
-      // 총 자산 = 현금 + 평가금액
-      total_capital = accountData.balance + accountData.evaluating;
+      // 현금 잔고만 사용 (평가금액 제외)
+      total_capital = accountData.balance;
       console.log(`✅ KIS API 조회 성공: ${total_capital.toLocaleString()}원 (현금: ${accountData.balance.toLocaleString()}원 + 평가: ${accountData.evaluating.toLocaleString()}원)`);
     } catch (kisError: any) {
       console.warn(`⚠️ KIS API 조회 실패: ${kisError.message}, 기본값 사용`);
