@@ -12,22 +12,33 @@ async function connectPostgres() {
 // GET: 설정 조회
 export async function GET(req: NextRequest) {
   try {
-    console.log(`🔌 DATABASE_URL: ${process.env.DATABASE_URL?.substring(0, 60)}...`);
+    // 환경변수에서 거래 활성화 상태 확인
+    const tradingEnabled = process.env.TRADING_ENABLED !== 'false';
+
+    console.log(`🔌 DATABASE_URL 확인: ${process.env.DATABASE_URL ? '있음' : '없음'}`);
     const pool = await connectPostgres();
-    console.log('✅ Postgres 연결 성공');
 
     try {
-      console.log('📖 설정 조회 중...');
+      console.log('📖 DB에서 설정 조회 중...');
       const result = await pool.query('SELECT config_json FROM trading_config WHERE id = 1');
       console.log(`✅ 데이터 조회: ${result.rows.length}행`);
       await pool.end();
 
       if (result.rows.length > 0) {
         const config = JSON.parse(result.rows[0].config_json);
-        return NextResponse.json({ success: true, data: config });
+        return NextResponse.json({
+          success: true,
+          data: {
+            ...config,
+            global_settings: {
+              ...config.global_settings,
+              enabled: tradingEnabled,
+            },
+          },
+        });
       }
     } catch (dbError: any) {
-      console.log('⚠️ trading_config 테이블 없음, 기본값 반환');
+      console.log('⚠️ DB 조회 실패, 기본값 반환:', dbError.message);
       await pool.end();
     }
 
@@ -76,26 +87,77 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const pool = await connectPostgres();
-    const config_json = JSON.stringify(body, null, 2);
 
+    // 환경변수에서 거래 활성화 상태 확인
+    const tradingEnabled = process.env.TRADING_ENABLED !== 'false';
+
+    // enabled는 환경변수에서만 제어, 저장되는 값에는 무시
+    const bodyToSave = {
+      ...body,
+      global_settings: {
+        ...body.global_settings,
+        enabled: tradingEnabled,
+      },
+    };
+
+    console.log('💾 설정 저장 시도:', { enabled: tradingEnabled });
+
+    // DB 저장 시도
+    let dbSaved = false;
     try {
-      // trading_config 테이블에 저장
-      await pool.query(
-        'INSERT INTO trading_config (id, config_json, updated_at) VALUES (1, $1, NOW()) ON CONFLICT (id) DO UPDATE SET config_json=$1, updated_at=NOW()',
-        [config_json]
-      );
-      console.log('✅ 설정이 저장되었습니다');
+      console.log('🔌 DB 연결 중...');
+      const pool = await connectPostgres();
+      const config_json = JSON.stringify(body, null, 2);
+      console.log('✅ DB 연결 성공, 쿼리 실행 중...');
+
+      try {
+        // 기존 데이터 삭제
+        console.log('📝 DELETE 실행 중...');
+        await pool.query('DELETE FROM trading_config WHERE id = 1');
+        console.log('✅ DELETE 완료');
+
+        // 새 데이터 삽입
+        console.log('📝 INSERT 실행 중...');
+        await pool.query(
+          'INSERT INTO trading_config (id, config_json, updated_at) VALUES (1, $1, NOW())',
+          [config_json]
+        );
+        console.log('✅ INSERT 완료');
+
+        dbSaved = true;
+        console.log('✅ DB에 저장됨:', { enabled: body.global_settings?.enabled });
+      } finally {
+        console.log('🔌 DB 연결 종료 중...');
+        await pool.end();
+        console.log('✅ DB 연결 종료됨');
+      }
     } catch (dbError: any) {
-      console.log('⚠️ trading_config 테이블 저장 실패, 로컬에만 저장됨:', dbError.message);
-      // 테이블이 없어도 성공으로 반환 (로컬 저장으로 처리)
+      console.error('❌ DB 저장 실패:', {
+        message: dbError.message,
+        code: dbError.code,
+        detail: dbError.detail,
+        stack: dbError.stack?.split('\n')[0]
+      });
     }
 
-    await pool.end();
-    return NextResponse.json({ success: true, message: '✅ 설정이 저장되었습니다' });
-  } catch (error) {
-    console.error('❌ 설정 저장 실패:', error);
-    // 에러가 발생해도 성공 응답 반환 (UX 개선)
-    return NextResponse.json({ success: true, message: '✅ 설정이 저장되었습니다 (로컬)' });
+    if (!dbSaved) {
+      console.error('❌ 데이터베이스 저장 실패 - 클라이언트에 오류 전달');
+      return NextResponse.json(
+        { success: false, error: 'Database save failed. Please try again.' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '✅ 설정이 저장되었습니다',
+      data: bodyToSave,
+    });
+  } catch (error: any) {
+    console.error('❌ 설정 저장 실패:', error.message);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }
