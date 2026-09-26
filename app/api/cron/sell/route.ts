@@ -64,12 +64,12 @@ export async function POST(req: NextRequest) {
     console.log('⚠️ 테이블 생성 시도:', err);
   }
 
-  // 🕐 실행 시간 확인 (08:00-20:00만)
+  // 🕐 실행 시간 확인 (09:00-20:00만)
   const now = new Date();
   const hour = now.getHours();
 
-  if (hour < 8 || hour >= 20) {
-    console.log(`⏸️ 거래 시간 아님 (현재: ${hour}:${String(now.getMinutes()).padStart(2, '0')} - 08:00-20:00만 실행)`);
+  if (hour < 9 || hour >= 20) {
+    console.log(`⏸️ 거래 시간 아님 (현재: ${hour}:${String(now.getMinutes()).padStart(2, '0')} - 09:00-20:00만 실행)`);
     await pool.end();
     return NextResponse.json({
       success: true,
