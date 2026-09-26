@@ -199,10 +199,11 @@ export async function POST(req: NextRequest) {
           console.log(`👉 ${sellReason}`);
         }
 
-        // 2️⃣ -3% 손실 시 손절매
-        if (!shouldSell && profitPct <= -3.0) {
+        // 2️⃣ 손절매 (설정값에서 읽음)
+        const stopLossPct = sellConfig.stop_loss_pct || -3.0;
+        if (!shouldSell && profitPct <= stopLossPct) {
           shouldSell = true;
-          sellReason = `-3% 손절매`;
+          sellReason = `${stopLossPct}% 손절매`;
           console.log(`⛔ ${sellReason}`);
         }
 
