@@ -76,20 +76,34 @@ export async function POST(req: NextRequest) {
         console.log(`📈 [${name}] 현재가: ${currentPrice.toLocaleString()}원`);
 
         // price_snapshots에 저장 (현재 close 가격만 필수)
-        await pool.query(
+        const insertResult = await pool.query(
           `INSERT INTO price_snapshots
            (code, timestamp, close, created_at)
            VALUES ($1, NOW(), $2, NOW())`,
           [code, currentPrice]
         );
 
-        successCount++;
-        results.push({
-          code,
-          name,
-          price: currentPrice,
-          status: '✅ 저장됨',
-        });
+        console.log(`💾 INSERT 결과: rowCount=${insertResult.rowCount}, code=${code}`);
+
+        if (insertResult.rowCount && insertResult.rowCount > 0) {
+          successCount++;
+          results.push({
+            code,
+            name,
+            price: currentPrice,
+            status: '✅ 저장됨',
+          });
+          console.log(`✅ [${name}] DB 저장 성공: ${currentPrice}원`);
+        } else {
+          errorCount++;
+          results.push({
+            code,
+            name,
+            price: currentPrice,
+            status: '❌ DB 저장 실패 (rowCount 0)',
+          });
+          console.error(`❌ [${name}] DB 저장 실패: rowCount=${insertResult.rowCount}`);
+        }
       } catch (err: any) {
         console.error(`❌ [${stock.name}] 가격 조회/저장 실패: ${err.message}`);
         errorCount++;
