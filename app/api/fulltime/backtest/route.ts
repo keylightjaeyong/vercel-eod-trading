@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 백테스팅 파라미터 (현재 설정)
+    // 신뢰도 0으로 설정하여 모든 V자 패턴 감지
     const config = {
       min_drop: 0.05,
       min_rise: 0.05,
