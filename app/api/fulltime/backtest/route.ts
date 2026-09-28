@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { KneeShoulderPattern } from '@/lib/patterns/knee-shoulder';
+import { nowInSeoul } from '@/lib/utils/timezone';
 
 async function connectPostgres() {
   const pool = new Pool({
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   try {
     // Force redeploy - confidence_threshold: 0
-    // 최근 24시간 가격 데이터 조회
+    // 최근 24시간 가격 데이터 조회 (Asia/Seoul 타임존)
     const priceData = await pool.query(`
       SELECT
         code,
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
         created_at,
         ROW_NUMBER() OVER (PARTITION BY code ORDER BY created_at ASC) as idx
       FROM price_snapshots
-      WHERE created_at >= NOW() - INTERVAL '24 hours'
+      WHERE created_at AT TIME ZONE 'Asia/Seoul' >= ${nowInSeoul()} - INTERVAL '24 hours'
       ORDER BY code, created_at ASC
     `);
 

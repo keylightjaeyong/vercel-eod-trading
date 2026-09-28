@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { KISApi } from '@/lib/kis/api';
+import { getExchangeCode, isTradingTime } from '@/lib/utils/exchange';
+import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -19,12 +21,13 @@ async function connectPostgres() {
  * 모든 활성화된 종목의 현재가를 price_snapshots에 저장
  */
 export async function POST(req: NextRequest) {
-  console.log('📊 가격 수집 시작 (5분 주기)');
+  const timeInfo = getKSTTimeInfo();
+  console.log(`📊 가격 수집 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 
   const pool = await connectPostgres();
 
   try {
-    // 0. price_snapshots 테이블 자동 생성 (Foreign Key 제거)
+    // 0. price_snapshots 테이블 자동 생성
     try {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS price_snapshots (
@@ -38,6 +41,29 @@ export async function POST(req: NextRequest) {
       console.log('✅ price_snapshots 테이블 확인/생성됨');
     } catch (err: any) {
       console.error(`❌ price_snapshots 테이블 생성 실패: ${err.message}`);
+    }
+
+    // 0-1. trade_positions 테이블 자동 생성
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS trade_positions (
+          id SERIAL PRIMARY KEY,
+          code VARCHAR(10) NOT NULL,
+          name VARCHAR(50),
+          quantity INT NOT NULL,
+          entry_price DECIMAL(10, 2) NOT NULL,
+          entry_time TIMESTAMP NOT NULL,
+          status VARCHAR(20) DEFAULT 'holding',
+          exit_price DECIMAL(10, 2),
+          exit_time TIMESTAMP,
+          profit_loss DECIMAL(15, 2),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✅ trade_positions 테이블 확인/생성됨');
+    } catch (err: any) {
+      console.error(`❌ trade_positions 테이블 생성 실패: ${err.message}`);
     }
 
     // 1. 활성화된 종목 조회
@@ -65,12 +91,15 @@ export async function POST(req: NextRequest) {
     let errorCount = 0;
 
     // 3. 각 종목별 현재가 조회 및 저장
+    const exchangeCode = getExchangeCode(timeInfo.hour, timeInfo.minute);
+    console.log(`🔄 현재 거래소: ${exchangeCode} (${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')})`);
+
     for (const stock of stocksResult.rows) {
       try {
         const { code, name } = stock;
 
         // KIS API에서 현재가 조회
-        const priceData = await kis.getPrice(code, 'NX');
+        const priceData = await kis.getPrice(code, exchangeCode);
         const currentPrice = priceData.current;
 
         console.log(`📈 [${name}] 현재가: ${currentPrice.toLocaleString()}원`);
@@ -79,7 +108,7 @@ export async function POST(req: NextRequest) {
         const insertResult = await pool.query(
           `INSERT INTO price_snapshots
            (code, timestamp, close, created_at)
-           VALUES ($1, NOW(), $2, NOW())`,
+           VALUES ($1, ${nowInSeoul()}, $2, ${nowInSeoul()})`,
           [code, currentPrice]
         );
 
@@ -120,7 +149,7 @@ export async function POST(req: NextRequest) {
     try {
       const deleteResult = await pool.query(
         `DELETE FROM price_snapshots
-         WHERE created_at < NOW() - INTERVAL '30 days'`
+         WHERE created_at AT TIME ZONE 'Asia/Seoul' < ${nowInSeoul()} - INTERVAL '30 days'`
       );
       console.log(`🗑️ 오래된 가격 데이터 삭제: ${deleteResult.rowCount}행`);
     } catch (err: any) {

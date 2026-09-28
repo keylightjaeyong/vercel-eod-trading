@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { KISApi } from '@/lib/kis/api';
 import { KneeShoulderPattern } from '@/lib/patterns/knee-shoulder';
+import { getExchangeCode, isTradingTime } from '@/lib/utils/exchange';
+import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
 
 async function connectPostgres() {
   const pool = new Pool({
@@ -12,7 +14,8 @@ async function connectPostgres() {
 }
 
 export async function POST(req: NextRequest) {
-  console.log('🔄 자동 거래 시작 (5분 주기: 08:00-20:00)');
+  const timeInfo = getKSTTimeInfo();
+  console.log(`🔄 자동 거래 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 
   const pool = await connectPostgres();
 
@@ -38,6 +41,22 @@ export async function POST(req: NextRequest) {
       )
     `);
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS trade_positions (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(10) NOT NULL,
+        name VARCHAR(50),
+        quantity INT NOT NULL,
+        entry_price DECIMAL(10, 2) NOT NULL,
+        entry_time TIMESTAMP NOT NULL,
+        status VARCHAR(20) DEFAULT 'holding',
+        exit_price DECIMAL(10, 2),
+        exit_time TIMESTAMP,
+        profit_loss DECIMAL(15, 2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
       INSERT INTO stocks (code, name, enabled) VALUES
       ('005930', '삼성전자', true),
       ('000660', 'SK하이닉스', true)
@@ -47,13 +66,9 @@ export async function POST(req: NextRequest) {
     console.log('⚠️ 테이블 생성 시도:', err);
   }
 
-  // 🕐 실행 시간 확인 (08:00-19:59만 KST)
-  const now = new Date();
-  const kstHour = now.getUTCHours() + 9;
-  const hour = kstHour % 24;
-
-  if (hour < 8 || hour >= 20) {
-    console.log(`⏸️ 거래 시간 아님 (현재: ${hour}:${String(now.getMinutes()).padStart(2, '0')} - 08:00-19:59만 실행)`);
+  // 🕐 실행 시간 확인 (08:00-20:00 KST)
+  if (!isTradingTime(timeInfo.hour)) {
+    console.log(`⏸️ 거래 시간 아님 (현재: ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')} - 08:00-20:00만 실행)`);
     await pool.end();
     return NextResponse.json({
       success: true,
@@ -130,6 +145,8 @@ export async function POST(req: NextRequest) {
     const results: any[] = [];
     const { min_drop } = config.global_settings;
     const kneeConfig = config.global_settings.knee_shoulder || {};
+    const exchangeCode = getExchangeCode(timeInfo.hour, timeInfo.minute);
+    console.log(`🔄 현재 거래소: ${exchangeCode} (${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')})`);
 
     // 4. 각 종목별 매수/매도 로직
     for (const stock of stocksResult.rows) {
@@ -137,7 +154,7 @@ export async function POST(req: NextRequest) {
         const { code, name } = stock;
 
         // 현재가 조회
-        const priceData = await kis.getPrice(code, 'NX');
+        const priceData = await kis.getPrice(code, exchangeCode);
         const currentPrice = priceData.current;
 
         console.log(`📊 [${name}] 현재가: ${currentPrice}`);
@@ -222,7 +239,7 @@ export async function POST(req: NextRequest) {
               try {
                 await pool.query(
                   `INSERT INTO trade_history (code, name, action, quantity, price, analysis, pattern_signal, pattern_confidence, created_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ${nowInSeoul()})`,
                   [
                     code,
                     name,
@@ -240,7 +257,19 @@ export async function POST(req: NextRequest) {
                   ]
                 );
               } catch (saveErr: any) {
-                console.log(`⚠️ [${name}] 이력 저장 실패: ${saveErr.message}`);
+                console.log(`⚠️ [${name}] trade_history 저장 실패: ${saveErr.message}`);
+              }
+
+              // trade_positions에 추가 (DB 통합)
+              try {
+                await pool.query(
+                  `INSERT INTO trade_positions (code, name, quantity, entry_price, entry_time, status, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, ${nowInSeoul()}, 'holding', ${nowInSeoul()}, ${nowInSeoul()})`,
+                  [code, name, quantity, currentPrice]
+                );
+                console.log(`✅ [${name}] trade_positions에 등록됨`);
+              } catch (posErr: any) {
+                console.error(`❌ [${name}] trade_positions 저장 실패: ${posErr.message}`);
               }
 
               buyCount++;

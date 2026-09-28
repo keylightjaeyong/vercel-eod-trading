@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { nowInSeoul } from '@/lib/utils/timezone';
 
 async function connectPostgres() {
   const pool = new Pool({
@@ -13,16 +14,16 @@ export async function GET(req: NextRequest) {
   const pool = await connectPostgres();
 
   try {
-    // 현재 날짜 기준 오늘 데이터만 조회 (모든 가격 히스토리)
+    // 현재 날짜 기준 오늘 데이터만 조회 (모든 가격 히스토리) - Asia/Seoul 기준
     const todayPrices = await pool.query(`
       SELECT
         code,
         close,
         created_at,
-        EXTRACT(HOUR FROM created_at) as hour,
-        EXTRACT(MINUTE FROM created_at) as minute
+        EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Seoul') as hour,
+        EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Seoul') as minute
       FROM price_snapshots
-      WHERE DATE(created_at AT TIME ZONE 'UTC') = CURRENT_DATE AT TIME ZONE 'UTC'
+      WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul') = CURRENT_DATE AT TIME ZONE 'Asia/Seoul'
       ORDER BY code, created_at ASC
     `);
 

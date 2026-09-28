@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { KISApi } from '@/lib/kis/api';
 import { KneeShoulderPattern } from '@/lib/patterns/knee-shoulder';
+import { getExchangeCode, isTradingTime } from '@/lib/utils/exchange';
+import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -20,7 +22,8 @@ async function connectPostgres() {
  * 보유 포지션의 매도 신호 판정
  */
 export async function POST(req: NextRequest) {
-  console.log('📤 매도 처리 시작 (5분 주기: 08:00-20:00)');
+  const timeInfo = getKSTTimeInfo();
+  console.log(`📤 매도 처리 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 
   const pool = await connectPostgres();
 
@@ -60,17 +63,29 @@ export async function POST(req: NextRequest) {
         FOREIGN KEY (code) REFERENCES stocks(code) ON DELETE CASCADE
       )
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trade_positions (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(10) NOT NULL,
+        name VARCHAR(50),
+        quantity INT NOT NULL,
+        entry_price DECIMAL(10, 2) NOT NULL,
+        entry_time TIMESTAMP NOT NULL,
+        status VARCHAR(20) DEFAULT 'holding',
+        exit_price DECIMAL(10, 2),
+        exit_time TIMESTAMP,
+        profit_loss DECIMAL(15, 2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
   } catch (err) {
     console.log('⚠️ 테이블 생성 시도:', err);
   }
 
-  // 🕐 실행 시간 확인 (08:00-19:59만 KST)
-  const now = new Date();
-  const kstHour = now.getUTCHours() + 9;
-  const hour = kstHour % 24;
-
-  if (hour < 8 || hour >= 20) {
-    console.log(`⏸️ 거래 시간 아님 (현재: ${hour}:${String(now.getMinutes()).padStart(2, '0')} - 08:00-19:59만 실행)`);
+  // 🕐 실행 시간 확인 (08:00-20:00 KST)
+  if (!isTradingTime(timeInfo.hour)) {
+    console.log(`⏸️ 거래 시간 아님 (현재: ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')} - 08:00-20:00만 실행)`);
     await pool.end();
     return NextResponse.json({
       success: true,
@@ -111,13 +126,12 @@ export async function POST(req: NextRequest) {
     const sellConfig = config.global_settings.sell || {};
     const patternConfig = config.global_settings.knee_shoulder || {};
 
-    // 2. 현재 보유 포지션 조회
+    // 2. 현재 보유 포지션 조회 (trade_positions 테이블에서)
     const positionsResult = await pool.query(
-      `SELECT DISTINCT ON (code) code, name, quantity, price as entry_price, created_at as entry_time
-       FROM trade_history
-       WHERE action = 'BUY'
-       AND code NOT IN (SELECT code FROM trade_history WHERE action = 'SELL')
-       ORDER BY code, created_at DESC`
+      `SELECT id, code, name, quantity, entry_price, entry_time
+       FROM trade_positions
+       WHERE status = 'holding'
+       ORDER BY entry_time ASC`
     );
 
     if (positionsResult.rows.length === 0) {
@@ -138,17 +152,19 @@ export async function POST(req: NextRequest) {
 
     const results = [];
     let sellCount = 0;
+    const exchangeCode = getExchangeCode(timeInfo.hour, timeInfo.minute);
+    console.log(`🔄 현재 거래소: ${exchangeCode} (${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')})`);
 
     // 4. 각 포지션별 매도 판정
     for (const position of positionsResult.rows) {
       try {
-        const { code, name, quantity, entry_price, entry_time } = position;
+        const { id, code, name, quantity, entry_price, entry_time } = position;
 
         console.log(`\n💼 [${name}(${code})] 포지션 분석 시작`);
         console.log(`   진입가: ${entry_price.toLocaleString()}원, 수량: ${quantity}주`);
 
         // 현재가 조회
-        const priceData = await kis.getPrice(code, 'NX');
+        const priceData = await kis.getPrice(code, exchangeCode);
         const currentPrice = priceData.current;
 
         console.log(`   현재가: ${currentPrice.toLocaleString()}원`);
@@ -246,7 +262,7 @@ export async function POST(req: NextRequest) {
               try {
                 await pool.query(
                   `INSERT INTO trade_history (code, name, action, quantity, price, analysis, created_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+                   VALUES ($1, $2, $3, $4, $5, $6, ${nowInSeoul()})`,
                   [
                     code,
                     name,
@@ -261,7 +277,21 @@ export async function POST(req: NextRequest) {
                   ]
                 );
               } catch (saveErr: any) {
-                console.log(`⚠️ [${name}] 이력 저장 실패: ${saveErr.message}`);
+                console.log(`⚠️ [${name}] trade_history 저장 실패: ${saveErr.message}`);
+              }
+
+              // trade_positions 업데이트
+              try {
+                await pool.query(
+                  `UPDATE trade_positions
+                   SET status = 'sold', exit_price = $1, exit_time = ${nowInSeoul()},
+                       profit_loss = $2, updated_at = ${nowInSeoul()}
+                   WHERE id = $3`,
+                  [sellPrice, sellPrice - entry_price, id]
+                );
+                console.log(`✅ [${name}] trade_positions 업데이트 완료`);
+              } catch (updateErr: any) {
+                console.error(`❌ [${name}] trade_positions 업데이트 실패: ${updateErr.message}`);
               }
 
               sellCount++;
