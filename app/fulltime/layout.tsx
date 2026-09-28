@@ -63,12 +63,6 @@ export default function FulltimeLayout({ children }: FulltimeLayoutProps) {
             label="거래 이력"
             sidebarOpen={sidebarOpen}
           />
-          <NavLink
-            href="/fulltime/analysis"
-            icon="🛑"
-            label="거래 분석"
-            sidebarOpen={sidebarOpen}
-          />
         </nav>
 
         {/* 푸터 */}
