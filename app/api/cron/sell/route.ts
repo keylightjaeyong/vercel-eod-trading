@@ -250,7 +250,7 @@ export async function POST(req: NextRequest) {
 
             while (sellAttempt < maxSellRetries) {
               try {
-                sellResponse = await kis.sell(code, quantity, sellPrice, 'MO');
+                sellResponse = await kis.sell(code, quantity);
                 console.log(`✅ [${name}] 매도 주문 성공: ${sellPrice}원`);
                 break;
               } catch (err: any) {
