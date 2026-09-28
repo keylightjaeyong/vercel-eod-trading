@@ -230,6 +230,37 @@ export class KISApi {
   }
 
   /**
+   * 재시도 로직이 포함된 현재가 조회
+   * 네트워크 에러/타임아웃 시 지수백오프로 자동 재시도
+   * @param code 종목 코드
+   * @param market 거래소 (NX=나스닥/NQ, KRX=한국거래소)
+   * @param maxRetries 최대 재시도 횟수 (기본: 3회)
+   */
+  async retryGetPrice(code: string, market: string = 'NX', maxRetries: number = 3): Promise<PriceData> {
+    let lastError: any;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`📡 현재가 조회 시도: ${code} (${attempt + 1}/${maxRetries})`);
+        return await this.getPrice(code, market);
+      } catch (err) {
+        lastError = err;
+
+        if (attempt < maxRetries - 1) {
+          // 지수백오프: 1초, 2초, 4초...
+          const delay = 1000 * Math.pow(2, attempt);
+          console.warn(`⚠️ [${code}] 재시도 ${attempt + 1}회 - ${delay}ms 후 재시도`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          console.error(`❌ [${code}] 모든 재시도 실패 (${maxRetries}회 시도)`);
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
    * 계좌 정보 조회 (잔액, 평가액 등)
    * 공식 문서: 투자계좌자산현황조회 API (CTRP6548R)
    */

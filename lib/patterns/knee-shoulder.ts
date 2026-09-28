@@ -177,7 +177,7 @@ export class KneeShoulderPattern {
       min_drop_pct: 0,
       min_rise_pct: 1.0,
       search_window: 10,
-      confidence_threshold: 0,  // 신뢰도 필터 제거 (모든 V자 패턴 포착)
+      confidence_threshold: 30,  // 🎯 신뢰도 필터: 30% 이상만 매수 (과도한 거래 신호 감소)
       max_history_points: 30,
       trailing_stop_loss_pct: 0.2,
       stop_loss_multiplier: 0.2,

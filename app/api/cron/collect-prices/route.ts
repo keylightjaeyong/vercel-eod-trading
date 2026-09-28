@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
 import { KISApi } from '@/lib/kis/api';
 import { getExchangeCode, isTradingTime } from '@/lib/utils/exchange';
 import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
+import { getPostgresPool } from '@/lib/db/pool';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
-
-async function connectPostgres() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
-  return pool;
-}
 
 /**
  * POST /api/cron/collect-prices
@@ -24,7 +16,7 @@ export async function POST(req: NextRequest) {
   const timeInfo = getKSTTimeInfo();
   console.log(`📊 가격 수집 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 
-  const pool = await connectPostgres();
+  const pool = getPostgresPool();
 
   try {
     // 0. price_snapshots 테이블 자동 생성
@@ -73,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     if (stocksResult.rows.length === 0) {
       console.log('📭 활성화된 종목 없음');
-      await pool.end();
+      // 커넥션풀 사용 → pool.end() 호출 안 함
       return NextResponse.json({
         success: true,
         message: '수집할 종목 없음',
@@ -98,8 +90,8 @@ export async function POST(req: NextRequest) {
       try {
         const { code, name } = stock;
 
-        // KIS API에서 현재가 조회
-        const priceData = await kis.getPrice(code, exchangeCode);
+        // KIS API에서 현재가 조회 (재시도 로직 포함)
+        const priceData = await kis.retryGetPrice(code, exchangeCode);
         const currentPrice = priceData.current;
 
         console.log(`📈 [${name}] 현재가: ${currentPrice.toLocaleString()}원`);
@@ -156,7 +148,7 @@ export async function POST(req: NextRequest) {
       console.warn(`⚠️ 데이터 정리 실패: ${err.message}`);
     }
 
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
 
     console.log(
       `✅ 가격 수집 완료: 성공 ${successCount}개, 실패 ${errorCount}개`
@@ -175,7 +167,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error('❌ 가격 수집 중 오류:', err);
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
     return NextResponse.json(
       { success: false, error: err.message },
       { status: 500 }

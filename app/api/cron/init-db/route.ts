@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
-
-async function connectPostgres() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
-  return pool;
-}
+import { getPostgresPool } from '@/lib/db/pool';
 
 export async function POST(req: NextRequest) {
-  const pool = await connectPostgres();
+  const pool = getPostgresPool();
 
   try {
     // 0. trading_config 테이블 생성 (거래 설정)
@@ -77,6 +69,26 @@ export async function POST(req: NextRequest) {
     `);
     console.log('✅ price_snapshots 인덱스 생성/확인됨');
 
+    // 2-3. kis_tokens 테이블 생성 (KIS API 토큰 캐싱)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS kis_tokens (
+        id SERIAL PRIMARY KEY,
+        access_token VARCHAR(500) NOT NULL,
+        refresh_token VARCHAR(500),
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ kis_tokens 테이블 생성/확인됨');
+
+    // 2-4. kis_tokens 인덱스 생성 (토큰 조회 성능)
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_kis_tokens_id
+      ON kis_tokens(id)
+    `);
+    console.log('✅ kis_tokens 인덱스 생성/확인됨');
+
     // 3. 기본 종목 데이터 삽입 (없으면)
     const stocksCheck = await pool.query(
       'SELECT COUNT(*) as count FROM stocks'
@@ -92,14 +104,14 @@ export async function POST(req: NextRequest) {
       console.log('✅ 기본 종목 데이터 삽입됨');
     }
 
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
     return NextResponse.json({
       success: true,
       message: '데이터베이스 초기화 완료',
     });
   } catch (err: any) {
     console.error('❌ DB 초기화 실패:', err);
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
     return NextResponse.json(
       { success: false, error: err.message },
       { status: 500 }

@@ -1,23 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
 import { KISApi } from '@/lib/kis/api';
 import { KneeShoulderPattern } from '@/lib/patterns/knee-shoulder';
 import { getExchangeCode, isTradingTime } from '@/lib/utils/exchange';
 import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
+import { getPostgresPool } from '@/lib/db/pool';
 
-async function connectPostgres() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
-  return pool;
-}
+// ⏱️ Vercel 함수 실행 제한 설정 (최대 30초)
+// 10개 종목을 2~3초씩 순차 처리 가능 (30초 / 10개 = 3초/종목)
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   const timeInfo = getKSTTimeInfo();
   console.log(`🔄 자동 거래 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 
-  const pool = await connectPostgres();
+  const pool = getPostgresPool();
 
   try {
     // 자동 테이블 생성
@@ -69,7 +65,7 @@ export async function POST(req: NextRequest) {
   // 🕐 실행 시간 확인 (08:00-20:00 KST)
   if (!isTradingTime(timeInfo.hour)) {
     console.log(`⏸️ 거래 시간 아님 (현재: ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')} - 08:00-20:00만 실행)`);
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
     return NextResponse.json({
       success: true,
       message: '거래 시간 아님 (08:00-20:00만 실행)',
@@ -130,7 +126,7 @@ export async function POST(req: NextRequest) {
 
     if (stocksResult.rows.length === 0) {
       console.log('📭 활성화된 종목 없음');
-      await pool.end();
+      // 커넥션풀 사용 → pool.end() 호출 안 함
       return NextResponse.json({ success: true, message: '종목 없음' });
     }
 
@@ -153,8 +149,8 @@ export async function POST(req: NextRequest) {
       try {
         const { code, name } = stock;
 
-        // 현재가 조회
-        const priceData = await kis.getPrice(code, exchangeCode);
+        // 현재가 조회 (재시도 로직 포함)
+        const priceData = await kis.retryGetPrice(code, exchangeCode);
         const currentPrice = priceData.current;
 
         console.log(`📊 [${name}] 현재가: ${currentPrice}`);
@@ -322,7 +318,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
     return NextResponse.json({
       success: true,
       message: `${results.length}개 종목 처리 (매수: ${buyCount}건, 오류: ${errorCount}건)`,
@@ -330,7 +326,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error('❌ 거래 오류:', err);
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

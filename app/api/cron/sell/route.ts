@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
 import { KISApi } from '@/lib/kis/api';
 import { KneeShoulderPattern } from '@/lib/patterns/knee-shoulder';
 import { getExchangeCode, isTradingTime } from '@/lib/utils/exchange';
 import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
+import { getPostgresPool } from '@/lib/db/pool';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
-
-async function connectPostgres() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
-  return pool;
-}
 
 /**
  * POST /api/cron/sell
@@ -25,7 +17,7 @@ export async function POST(req: NextRequest) {
   const timeInfo = getKSTTimeInfo();
   console.log(`📤 매도 처리 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 
-  const pool = await connectPostgres();
+  const pool = getPostgresPool();
 
   try {
     // 자동 테이블 생성
@@ -86,7 +78,7 @@ export async function POST(req: NextRequest) {
   // 🕐 실행 시간 확인 (08:00-20:00 KST)
   if (!isTradingTime(timeInfo.hour)) {
     console.log(`⏸️ 거래 시간 아님 (현재: ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')} - 08:00-20:00만 실행)`);
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
     return NextResponse.json({
       success: true,
       message: '거래 시간 아님 (08:00-20:00만 실행)',
@@ -136,7 +128,7 @@ export async function POST(req: NextRequest) {
 
     if (positionsResult.rows.length === 0) {
       console.log('📭 보유 포지션 없음');
-      await pool.end();
+      // 커넥션풀 사용 → pool.end() 호출 안 함
       return NextResponse.json({
         success: true,
         message: '보유 포지션 없음',
@@ -163,8 +155,8 @@ export async function POST(req: NextRequest) {
         console.log(`\n💼 [${name}(${code})] 포지션 분석 시작`);
         console.log(`   진입가: ${entry_price.toLocaleString()}원, 수량: ${quantity}주`);
 
-        // 현재가 조회
-        const priceData = await kis.getPrice(code, exchangeCode);
+        // 현재가 조회 (재시도 로직 포함)
+        const priceData = await kis.retryGetPrice(code, exchangeCode);
         const currentPrice = priceData.current;
 
         console.log(`   현재가: ${currentPrice.toLocaleString()}원`);
@@ -339,7 +331,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
 
     console.log(`\n✅ 매도 처리 완료: ${sellCount}개 매도`);
 
@@ -350,7 +342,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error('❌ 매도 중 오류:', err);
-    await pool.end();
+    // 커넥션풀 사용 → pool.end() 호출 안 함
     return NextResponse.json(
       { success: false, error: err.message },
       { status: 500 }
