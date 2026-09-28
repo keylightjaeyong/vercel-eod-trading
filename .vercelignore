@@ -1,0 +1,3 @@
+# Ignore Supabase related files
+supabase/
+.env.supabase
