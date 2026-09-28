@@ -47,9 +47,10 @@ export async function POST(req: NextRequest) {
     console.log('⚠️ 테이블 생성 시도:', err);
   }
 
-  // 🕐 실행 시간 확인 (08:00-19:59만)
+  // 🕐 실행 시간 확인 (08:00-19:59만 KST)
   const now = new Date();
-  const hour = now.getHours();
+  const kstHour = now.getUTCHours() + 9;
+  const hour = kstHour % 24;
 
   if (hour < 8 || hour >= 20) {
     console.log(`⏸️ 거래 시간 아님 (현재: ${hour}:${String(now.getMinutes()).padStart(2, '0')} - 08:00-19:59만 실행)`);
@@ -198,8 +199,8 @@ export async function POST(req: NextRequest) {
             `📈 [${name}] 낙폭: ${dropPct.toFixed(2)}% (기준: ${min_drop}%) | 패턴: ${signal.reason}`
           );
 
-          // 낙폭률이 기준 이상이면 추가로 매수 신호
-          if (dropPct >= (min_drop || 1.0) && signal.confidence >= 50) {
+          // 낙폭률이 기준 이상이면 추가로 매수 신호 (신뢰도 필터 제거)
+          if (dropPct >= (min_drop || 1.0)) {
             shouldBuy = true;
           }
         }
