@@ -65,13 +65,17 @@ export async function GET(req: NextRequest) {
 
     await pool.end();
 
+    const totalPrices = Object.values(pricesByCode).reduce((sum: number, prices: any) => {
+      return sum + (Array.isArray(prices) ? prices.length : 0);
+    }, 0);
+
     const response = NextResponse.json({
       success: true,
       date: new Date().toLocaleDateString('ko-KR'),
       pricesByCode,
       stats,
       debug: {
-        total_prices: Object.values(pricesByCode).reduce((sum: number, arr: any[]) => sum + arr.length, 0),
+        total_prices: totalPrices,
         codes: Object.keys(pricesByCode),
       },
     });
