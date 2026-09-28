@@ -104,6 +104,11 @@ export async function POST(req: NextRequest) {
       console.log('✅ 기본 종목 데이터 삽입됨');
     }
 
+    // 레거시 시스템 비활성화 알림
+    console.log(
+      '⚠️ 레거시 /api/buy, /api/sell은 비활성화됨. /api/cron/trade, /api/cron/sell 사용'
+    );
+
     // 커넥션풀 사용 → pool.end() 호출 안 함
     return NextResponse.json({
       success: true,

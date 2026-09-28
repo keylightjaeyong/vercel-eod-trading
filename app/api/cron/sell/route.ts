@@ -209,7 +209,8 @@ export async function POST(req: NextRequest) {
         }
 
         // 2️⃣ 손절매 (설정값에서 읽음)
-        const stopLossPct = sellConfig.stop_loss_pct || -3.0;
+        // -1.0% 손절매 (사용자 요구사항)
+        const stopLossPct = sellConfig.stop_loss_pct || -1.0;
         if (!shouldSell && profitPct <= stopLossPct) {
           shouldSell = true;
           sellReason = `${stopLossPct}% 손절매`;
@@ -242,10 +243,37 @@ export async function POST(req: NextRequest) {
           console.log(`🎯 [${name}] 매도 신호 감지: ${sellReason}`);
 
           try {
-            // KIS API로 매도 주문
-            const sellResult = await kis.sell(code, quantity);
+            // KIS API로 매도 주문 (재시도 로직 포함)
+            let sellResponse = null;
+            let sellAttempt = 0;
+            const maxSellRetries = 3;
 
-            if (sellResult) {
+            while (sellAttempt < maxSellRetries) {
+              try {
+                sellResponse = await kis.sell(code, quantity, sellPrice, 'MO');
+                console.log(`✅ [${name}] 매도 주문 성공: ${sellPrice}원`);
+                break;
+              } catch (err: any) {
+                sellAttempt++;
+                if (sellAttempt < maxSellRetries) {
+                  console.warn(
+                    `⚠️ [${name}] 매도 실패 (${sellAttempt}회): ${err.message}, 1초 후 재시도...`
+                  );
+                  // 지수백오프: 1초, 2초, 3초
+                  await new Promise((resolve) =>
+                    setTimeout(resolve, 1000 * sellAttempt)
+                  );
+                } else {
+                  console.error(
+                    `❌ [${name}] 매도 최종 실패 (${maxSellRetries}회 초과): ${err.message}`
+                  );
+                  throw err;
+                }
+              }
+            }
+
+            // 매도 성공 후 DB 업데이트
+            if (sellResponse) {
               console.log(
                 `✅ [${name}] 매도 완료: ${quantity}주 @ ${sellPrice}원 (수익: ${profitPct.toFixed(2)}%)`
               );
