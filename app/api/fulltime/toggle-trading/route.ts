@@ -111,6 +111,28 @@ export async function GET(req: NextRequest) {
   const pool = getPostgresPool();
 
   try {
+    // 테이블이 없으면 생성
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trading_status (
+        id SERIAL PRIMARY KEY,
+        trading_enabled BOOLEAN DEFAULT true,
+        stopped_at TIMESTAMP NULL,
+        stopped_reason VARCHAR(255),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 초기 레코드가 없으면 생성
+    const countResult = await pool.query(
+      'SELECT COUNT(*) as count FROM trading_status'
+    );
+    if (countResult.rows[0].count === 0) {
+      await pool.query(`
+        INSERT INTO trading_status (trading_enabled, updated_at)
+        VALUES (true, CURRENT_TIMESTAMP)
+      `);
+    }
+
     const result = await pool.query(
       'SELECT * FROM trading_status WHERE id = 1'
     );
