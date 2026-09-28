@@ -74,6 +74,19 @@ export async function POST(req: NextRequest) {
 
     console.log(`🔍 수집 대상 종목: ${stocksResult.rows.length}개`);
 
+    // 1-1. 거래 상태 확인 (가격 수집은 계속 진행)
+    try {
+      const statusResult = await pool.query(
+        'SELECT trading_enabled FROM trading_status WHERE id = 1'
+      );
+      const status = statusResult.rows[0];
+      if (status && !status.trading_enabled) {
+        console.log(`⚠️ 거래 중단 상태이지만 가격 수집은 계속 진행`);
+      }
+    } catch (err) {
+      console.warn('⚠️ 거래 상태 조회 실패, 계속 진행:', err);
+    }
+
     // 2. KIS API 초기화
     const kis = new KISApi();
     kis.updateEnv();

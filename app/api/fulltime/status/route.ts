@@ -1,27 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { KISApi } from '@/lib/kis/api';
+import { getPostgresPool } from '@/lib/db/pool';
 
 /**
  * /api/fulltime/status
  * 프론트엔드에서 거래 상태 조회
- * KIS API에서 실제 잔고 조회 + DB에서 설정 읽기
+ * KIS API에서 실제 잔고 조회 + DB에서 설정 읽기 + 거래 활성화 상태 조회
  */
 
 export const runtime = 'nodejs';
 export const maxDuration = 10;
 
-async function connectPostgres() {
-  const { Pool } = await import('pg');
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
-  return pool;
-}
-
 export async function GET(req: NextRequest) {
   try {
-    const pool = await connectPostgres();
+    const pool = getPostgresPool();
 
     // 1. KIS API에서 실제 잔고 조회
     let total_capital = 300000;
@@ -81,7 +73,26 @@ export async function GET(req: NextRequest) {
       console.log('⚠️ 포지션 조회 실패:', e);
     }
 
-    // 4. 일일 손익 계산
+    // 4. 거래 활성화 상태 조회
+    let trading_enabled = true;
+    let stopped_at = null;
+    let stopped_reason = null;
+    try {
+      const statusResult = await pool.query(
+        'SELECT trading_enabled, stopped_at, stopped_reason FROM trading_status WHERE id = 1'
+      );
+      if (statusResult.rows.length > 0) {
+        const status = statusResult.rows[0];
+        trading_enabled = status.trading_enabled;
+        stopped_at = status.stopped_at;
+        stopped_reason = status.stopped_reason;
+        console.log(`🚦 거래 상태: ${trading_enabled ? '활성화' : '중단'}`);
+      }
+    } catch (e) {
+      console.log('⚠️ 거래 상태 조회 실패:', e);
+    }
+
+    // 5. 일일 손익 계산
     let daily_pnl = {
       date: new Date().toISOString().split('T')[0],
       trades: 0,
@@ -101,11 +112,12 @@ export async function GET(req: NextRequest) {
       console.log('⚠️ 거래 기록 조회 실패:', e);
     }
 
-    await pool.end();
-
     const statusData = {
       timestamp,
-      enabled: true,
+      enabled: trading_enabled,
+      trading_enabled,
+      stopped_at,
+      stopped_reason,
       test_mode: false,
       total_capital: parseInt(total_capital.toString()),
       active_positions,
@@ -130,6 +142,9 @@ export async function GET(req: NextRequest) {
         data: {
           timestamp: new Date().toISOString(),
           enabled: true,
+          trading_enabled: true,
+          stopped_at: null,
+          stopped_reason: null,
           test_mode: false,
           total_capital: 300000,
           active_positions: 0,

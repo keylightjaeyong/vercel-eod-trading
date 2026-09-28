@@ -15,6 +15,30 @@ export async function POST(req: NextRequest) {
     `);
     console.log('✅ trading_config 테이블 생성/확인됨');
 
+    // 0-1. trading_status 테이블 생성 (거래 활성화 상태)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trading_status (
+        id SERIAL PRIMARY KEY,
+        trading_enabled BOOLEAN DEFAULT true,
+        stopped_at TIMESTAMP NULL,
+        stopped_reason VARCHAR(255),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ trading_status 테이블 생성/확인됨');
+
+    // 0-2. trading_status 초기 레코드 생성 (없으면)
+    const statusCheck = await pool.query(
+      'SELECT COUNT(*) as count FROM trading_status'
+    );
+    if (statusCheck.rows[0].count === 0) {
+      await pool.query(`
+        INSERT INTO trading_status (trading_enabled, updated_at)
+        VALUES (true, CURRENT_TIMESTAMP)
+      `);
+      console.log('✅ trading_status 초기 레코드 생성됨');
+    }
+
     // 1. stocks 테이블 생성 (종목 목록)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS stocks (

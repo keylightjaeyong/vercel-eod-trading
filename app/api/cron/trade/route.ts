@@ -73,6 +73,25 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // 🛑 거래 활성화 상태 확인
+  try {
+    const statusResult = await pool.query(
+      'SELECT trading_enabled, stopped_reason FROM trading_status WHERE id = 1'
+    );
+    const status = statusResult.rows[0];
+
+    if (status && !status.trading_enabled) {
+      console.log(`⚠️ 거래가 중단됨. 실행하지 않음. (사유: ${status.stopped_reason || '알 수 없음'})`);
+      return NextResponse.json({
+        success: true,
+        message: '거래 중단 상태',
+        results: [],
+      });
+    }
+  } catch (err) {
+    console.warn('⚠️ 거래 상태 조회 실패, 계속 진행:', err);
+  }
+
   // 환경변수에서 거래 활성화 상태 확인
   const rawValue = process.env.TRADING_ENABLED;
   const tradingEnabled = rawValue !== 'false';

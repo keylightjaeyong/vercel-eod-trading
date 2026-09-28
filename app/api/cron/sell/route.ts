@@ -86,6 +86,23 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // 🛑 손절매는 계속 작동하되, 새로운 신호는 무시
+  let tradingEnabled = true;
+  try {
+    const statusResult = await pool.query(
+      'SELECT trading_enabled, stopped_reason FROM trading_status WHERE id = 1'
+    );
+    const status = statusResult.rows[0];
+    if (status) {
+      tradingEnabled = status.trading_enabled;
+      if (!tradingEnabled) {
+        console.log(`⚠️ 거래 중단 상태 (손절매는 계속 작동). 사유: ${status.stopped_reason || '알 수 없음'}`);
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ 거래 상태 조회 실패, 계속 진행:', err);
+  }
+
   try {
     // 1. 설정 조회
     let config: any = {
