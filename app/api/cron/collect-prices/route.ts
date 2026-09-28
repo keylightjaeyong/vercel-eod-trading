@@ -145,13 +145,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. 오래된 데이터 삭제 (30일 이상)
+    // 4. 오래된 데이터 삭제 (30일 이상 - 날짜 단위)
     try {
       const deleteResult = await pool.query(
         `DELETE FROM price_snapshots
-         WHERE created_at AT TIME ZONE 'Asia/Seoul' < ${nowInSeoul()} - INTERVAL '30 days'`
+         WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul') < CURRENT_DATE AT TIME ZONE 'Asia/Seoul' - INTERVAL '30 days'`
       );
-      console.log(`🗑️ 오래된 가격 데이터 삭제: ${deleteResult.rowCount}행`);
+      console.log(`🗑️ 오래된 가격 데이터 삭제 (날짜 단위): ${deleteResult.rowCount}행`);
     } catch (err: any) {
       console.warn(`⚠️ 데이터 정리 실패: ${err.message}`);
     }
