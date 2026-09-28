@@ -137,6 +137,12 @@ export async function POST(req: NextRequest) {
       success: true,
       message: `가격 수집 완료: ${successCount}개 성공, ${errorCount}개 실패`,
       results,
+      debug: {
+        successCount,
+        errorCount,
+        database: process.env.DATABASE_URL ? 'Connected' : 'Not connected',
+        timestamp: new Date().toISOString(),
+      },
     });
   } catch (err: any) {
     console.error('❌ 가격 수집 중 오류:', err);
