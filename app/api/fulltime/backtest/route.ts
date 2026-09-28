@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       min_drop: 0.05,
       min_rise: 0.05,
       search_window: 15,
-      confidence_threshold: 30, // 더 낮춤
+      confidence_threshold: 0, // 신뢰도 필터 제거
     };
 
     const backtest_results: any = {};
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
         );
 
         // 매수 신호
-        if (!buySignal && signal.signal === 'BUY' && signal.confidence >= 30) {
+        if (!buySignal && signal.signal === 'BUY') {
           buySignal = signal;
           buyPrice = priceArray[i];
           maxPrice = buyPrice;
