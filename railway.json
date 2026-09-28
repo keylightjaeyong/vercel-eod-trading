@@ -1,0 +1,6 @@
+{
+  "name": "vercel-eod-trading",
+  "description": "Korean stock trading system with V-shaped pattern detection",
+  "buildCommand": "npm run build",
+  "startCommand": "npm run start"
+}

@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   const pool = await connectPostgres();
 
   try {
+    // Force redeploy - confidence_threshold: 0
     // 최근 24시간 가격 데이터 조회
     const priceData = await pool.query(`
       SELECT
