@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const pool = await connectPostgres();
 
   try {
-    // 오늘 수집된 가격 데이터 (최근 24시간)
+    // 현재 날짜 기준 오늘 데이터만 조회 (모든 가격 히스토리)
     const todayPrices = await pool.query(`
       SELECT
         code,
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
         EXTRACT(HOUR FROM created_at) as hour,
         EXTRACT(MINUTE FROM created_at) as minute
       FROM price_snapshots
-      WHERE created_at >= NOW() - INTERVAL '24 hours'
+      WHERE DATE(created_at AT TIME ZONE 'UTC') = CURRENT_DATE AT TIME ZONE 'UTC'
       ORDER BY code, created_at ASC
     `);
 
@@ -65,12 +65,21 @@ export async function GET(req: NextRequest) {
 
     await pool.end();
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       date: new Date().toLocaleDateString('ko-KR'),
       pricesByCode,
       stats,
+      debug: {
+        total_prices: Object.values(pricesByCode).reduce((sum: number, arr: any[]) => sum + arr.length, 0),
+        codes: Object.keys(pricesByCode),
+      },
     });
+
+    // 캐싱 비활성화
+    response.headers.set('Cache-Control', 'no-store, max-age=0');
+
+    return response;
   } catch (err: any) {
     console.error('❌ 가격 이력 조회 오류:', err);
     await pool.end();
