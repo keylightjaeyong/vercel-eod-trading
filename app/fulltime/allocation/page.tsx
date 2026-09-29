@@ -68,6 +68,11 @@ export default function AllocationPage() {
       setAllocation(data.data);
       setTotalCapital(data.data.total_capital);
 
+      console.log('💰 allocation 상태 업데이트:', {
+        total_capital: data.data.total_capital,
+        allocation_set: !!data.data,
+      });
+
       // 할당 비율 설정
       const allocs: Record<string, number> = {};
       Object.entries(data.data.allocations).forEach(([code, info]: [string, any]) => {
