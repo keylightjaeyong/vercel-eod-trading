@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { KISApi } from '@/lib/kis/api';
 import { KneeShoulderPattern } from '@/lib/patterns/knee-shoulder';
+import { HybridTrading } from '@/lib/patterns/hybrid-trading';
 import { getExchangeCode, isTradingTime } from '@/lib/utils/exchange';
 import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
 import { getPostgresPool } from '@/lib/db/pool';
@@ -240,29 +241,27 @@ export async function POST(req: NextRequest) {
           prices = [currentPrice];
         }
 
-        // V자 패턴 신호 생성
-        const signal = KneeShoulderPattern.generateTradingSignal(
+        // 🎯 하이브리드 알고리즘: 저점 반등 + 가속도 부호 변화
+        const hybridSignal = HybridTrading.generateBuySignal(
           prices,
-          kneeConfig
+          min_rise || 0.5
         );
 
-        let shouldBuy = signal.signal === 'BUY';
+        let shouldBuy = hybridSignal.signal === 'BUY';
 
-        // 기본 낙폭률 조건도 함께 확인 (보수적 접근)
-        if (prices.length >= 2) {
-          const dropPct =
-            ((prices[prices.length - 2] - currentPrice) /
-              prices[prices.length - 2]) *
-            100;
-          console.log(
-            `📈 [${name}] 낙폭: ${dropPct.toFixed(2)}% (기준: ${min_drop}%) | 패턴: ${signal.reason}`
-          );
-
-          // 낙폭률이 기준 이상이면 추가로 매수 신호 (신뢰도 필터 제거)
-          if (dropPct >= (min_drop || 1.0)) {
-            shouldBuy = true;
-          }
-        }
+        console.log(
+          `💡 [${name}] 하이브리드 신호: ${hybridSignal.signal} (신뢰도: ${hybridSignal.confidence}%)`
+        );
+        console.log(
+          `   저점: ${hybridSignal.lowestPrice.toFixed(2)}원 → 매수기준: ${hybridSignal.buyPrice.toFixed(2)}원 → 현재: ${hybridSignal.currentPrice.toFixed(2)}원`
+        );
+        console.log(
+          `   변화율: ${hybridSignal.changeRate.map(r => r.toFixed(2) + '%').join(' → ')}`
+        );
+        console.log(
+          `   가속도: ${hybridSignal.acceleration.map(a => a.toFixed(4)).join(' → ')}`
+        );
+        console.log(`   사유: ${hybridSignal.reason}`);
 
         if (shouldBuy) {
           console.log(`🎯 [${name}] 매수 신호! (신뢰도: ${signal.confidence}%)`);
