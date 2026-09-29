@@ -27,11 +27,14 @@ export async function GET(req: NextRequest) {
       total_capital = accountData.balance;
       console.log(`✅ KIS API 조회 성공: ${total_capital.toLocaleString()}원`);
     } catch (kisError: any) {
-      console.warn(`⚠️ KIS API 조회 실패: ${kisError.message}`);
+      const errorMsg = kisError.message || String(kisError);
+      const errorDetail = kisError?.response?.data?.msg || '';
+      console.warn(`⚠️ KIS API 조회 실패: ${errorMsg}${errorDetail ? ` (상세: ${errorDetail})` : ''}`);
       console.log(`💡 현재는 기본값 300,000원 사용. 실제 잔고는 KIS 포탈에서 확인하세요.`);
 
       // 토큰 만료 에러이면 강제 갱신 시도
-      if (kisError.message?.includes('token')) {
+      const isTokenError = errorMsg?.includes('token') || errorDetail?.includes('token');
+      if (isTokenError) {
         try {
           console.log('🔄 토큰 강제 갱신 시도...');
           const kis2 = new KISApi();
