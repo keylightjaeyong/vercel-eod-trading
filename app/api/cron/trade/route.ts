@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
 
         console.log(`📊 [${name}] 현재가: ${currentPrice.toLocaleString()}원 (거래소코드: NX)`);
 
-        // 최근 30개 가격 이력 조회 (V자 패턴 분석용)
+        // 최근 30개 가격 이력 조회 (하이브리드 알고리즘용)
         let prices: number[] = [];
         try {
           const priceHistoryResult = await pool.query(
@@ -212,32 +212,26 @@ export async function POST(req: NextRequest) {
              LIMIT 30`,
             [code]
           );
+
+          // 📊 데이터량 로깅
+          console.log(`📈 [${name}] DB 저장 데이터: ${priceHistoryResult.rows.length}개 봉`);
+
           if (priceHistoryResult.rows.length > 0) {
             prices = priceHistoryResult.rows
               .reverse()
               .map(r => parseFloat(r.close));
             // 현재가 추가 (최신)
             prices.push(currentPrice);
+            console.log(`   ├─ 총 분석 데이터: ${prices.length}개 (저장 ${priceHistoryResult.rows.length}개 + 현재가 1개)`);
+            console.log(`   ├─ 저점 추적: ${priceHistoryResult.rows.length >= 4 ? '✅ 가능' : '⏳ 불충분'} (최소 4개 필요)`);
+            console.log(`   └─ 정확도: ${priceHistoryResult.rows.length >= 20 ? '📊 높음 (20개+)' : priceHistoryResult.rows.length >= 10 ? '📊 중간 (10개+)' : '📊 낮음'}`);
           } else {
-            // 가격 이력 없으면 trade_history에서 조회
-            const tradeHistoryResult = await pool.query(
-              `SELECT price FROM trade_history
-               WHERE code = $1 AND action = 'BUY'
-               ORDER BY created_at DESC
-               LIMIT 1`,
-              [code]
-            );
-            if (tradeHistoryResult.rows.length > 0) {
-              prices = [
-                parseFloat(tradeHistoryResult.rows[0].price),
-                currentPrice,
-              ];
-            } else {
-              prices = [currentPrice];
-            }
+            console.log(`   └─ price_snapshots 비어있음 (부트스트랩 또는 수집 대기 필요)`);
+            // 가격 이력 없으면 현재가만 사용
+            prices = [currentPrice];
           }
         } catch (err) {
-          console.log(`⚠️ [${name}] 가격 이력 조회 실패`);
+          console.log(`⚠️ [${name}] 가격 이력 조회 실패: ${err}`);
           prices = [currentPrice];
         }
 
