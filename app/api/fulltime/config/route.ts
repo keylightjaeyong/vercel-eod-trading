@@ -31,10 +31,18 @@ export async function GET(req: NextRequest) {
         const kneeShoulderConfig = globalSettings.knee_shoulder || {};
         const sellConfig = globalSettings.sell || {};
 
+        // ✅ stocks 필드가 없으면 기본값 사용
+        const stocks = config.stocks || [
+          { code: '000660', name: 'SK하이닉스', enabled: false, allocation_pct: 0 },
+          { code: '003550', name: 'LG', enabled: false, allocation_pct: 0 },
+          { code: '005930', name: '삼성전자', enabled: true, allocation_pct: 100 },
+        ];
+
         return NextResponse.json({
           success: true,
           data: {
             ...config,
+            stocks,
             global_settings: {
               ...globalSettings,
               enabled: tradingEnabled,
