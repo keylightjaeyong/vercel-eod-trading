@@ -151,9 +151,31 @@ export async function POST(req: NextRequest) {
 
     console.log(`🚀 거래 시작: ${stocksResult.rows.length}개 종목`);
 
-    // 3. KIS API 초기화
+    // 3. KIS API 초기화 및 계좌 정보 조회
     const kis = new KISApi();
     kis.updateEnv();
+
+    let totalCapital = 300000; // 기본값
+    let orderableAmount = 300000; // 기본값 (100% 공격적 전략)
+
+    try {
+      // 계좌 잔액 조회 (예수금액)
+      const accountData = await kis.getAccount();
+      totalCapital = accountData.balance;
+      console.log(`💰 계좌 잔액: ${totalCapital.toLocaleString()}원`);
+    } catch (err) {
+      console.warn(`⚠️ 계좌 잔액 조회 실패, 기본값 300,000원 사용: ${err}`);
+    }
+
+    try {
+      // 보유 포지션 조회 (주문 가능금액 추정)
+      const balanceData = await kis.getBalance();
+      orderableAmount = balanceData.estimated_order_amount || Math.floor(totalCapital * 0.85);
+      console.log(`💵 주문 가능금액 추정: ${orderableAmount.toLocaleString()}원`);
+    } catch (err) {
+      console.warn(`⚠️ 보유 포지션 조회 실패, 기본값 사용: ${err}`);
+      orderableAmount = totalCapital; // 100% 공격적 전략
+    }
 
     let buyCount = 0;
     let errorCount = 0;
@@ -168,11 +190,11 @@ export async function POST(req: NextRequest) {
       try {
         const { code, name } = stock;
 
-        // 현재가 조회 (재시도 로직 포함)
-        const priceData = await kis.retryGetPrice(code, exchangeCode);
-        const currentPrice = priceData.current;
+        // 현재가 조회 (NX 사용 - 유일하게 작동하는 코드)
+        const priceData = await kis.retryGetPrice(code, 'NX');
+        const currentPrice = priceData.current || 0;
 
-        console.log(`📊 [${name}] 현재가: ${currentPrice}`);
+        console.log(`📊 [${name}] 현재가: ${currentPrice.toLocaleString()}원 (거래소코드: NX)`);
 
         // 최근 30개 가격 이력 조회 (V자 패턴 분석용)
         let prices: number[] = [];
@@ -241,13 +263,42 @@ export async function POST(req: NextRequest) {
           console.log(`🎯 [${name}] 매수 신호! (신뢰도: ${signal.confidence}%)`);
 
           try {
-            // 매수 실행
-            const quantity = 1; // 기본 1주
-            const orderResult = await kis.buy(code, quantity);
+            // 할당 비율 조회
+            let allocationPct = 100; // 기본값
+            try {
+              const allocResult = await pool.query(
+                'SELECT allocation_pct FROM stocks WHERE code = $1',
+                [code]
+              );
+              if (allocResult.rows.length > 0) {
+                allocationPct = parseFloat(allocResult.rows[0].allocation_pct) || 100;
+              }
+            } catch (err) {
+              console.warn(`⚠️ 할당비율 조회 실패, 기본값 100% 사용: ${err}`);
+            }
 
-            if (orderResult) {
+            // ✅ 실제 매수가능수량 조회 (공식 API - 증거금률, 수수료 반영)
+            let actualBuyQty = 0;
+            try {
+              const orderableInfo = await kis.getOrderableAmount(code, currentPrice);
+              actualBuyQty = orderableInfo.nrcvb_buy_qty; // 미수없는매수수량 사용
+              console.log(`✅ [${name}] 실제 매수가능수량: ${actualBuyQty}주 (공식 API 확인)`);
+            } catch (orderableErr) {
+              console.warn(`⚠️ 매수가능조회 실패, 추정값으로 계산: ${orderableErr}`);
+              // Fallback: 기존 추정 방식 사용
+              const allocAmount = Math.floor(orderableAmount * (allocationPct / 100));
+              actualBuyQty = Math.floor(allocAmount / currentPrice);
+            }
+
+            console.log(`💰 [${name}] 할당비율: ${allocationPct}% | 매수가능수량: ${actualBuyQty}주`);
+
+            if (actualBuyQty > 0) {
+              // 매수 실행
+              const orderResult = await kis.buy(code, actualBuyQty);
+
+              if (orderResult) {
               console.log(
-                `✅ [${name}] 매수 완료: ${quantity}주 @ ${currentPrice}원`
+                `✅ [${name}] 매수 완료: ${actualBuyQty}주 @ ${currentPrice}원`
               );
 
               // 거래 이력 저장 (패턴 정보 포함)
@@ -259,7 +310,7 @@ export async function POST(req: NextRequest) {
                     code,
                     name,
                     'BUY',
-                    quantity,
+                    actualBuyQty,
                     currentPrice,
                     JSON.stringify({
                       signal: signal.signal,
@@ -280,7 +331,7 @@ export async function POST(req: NextRequest) {
                 await pool.query(
                   `INSERT INTO trade_positions (code, name, quantity, entry_price, entry_time, status, created_at, updated_at)
                    VALUES ($1, $2, $3, $4, ${nowInSeoul()}, 'holding', ${nowInSeoul()}, ${nowInSeoul()})`,
-                  [code, name, quantity, currentPrice]
+                  [code, name, actualBuyQty, currentPrice]
                 );
                 console.log(`✅ [${name}] trade_positions에 등록됨`);
               } catch (posErr: any) {
@@ -292,13 +343,16 @@ export async function POST(req: NextRequest) {
                 code,
                 name,
                 action: 'BUY',
-                quantity,
+                quantity: actualBuyQty,
                 price: currentPrice,
                 signal: signal.signal,
                 confidence: signal.confidence,
                 reason: signal.reason,
                 status: '✅ 매수 완료',
               });
+              }
+            } else {
+              console.log(`⚠️ [${name}] 실제 매수가능수량이 0주 이하라 매수 불가 (조회된 수량: ${actualBuyQty}주, 현재가: ${currentPrice}원)`);
             }
           } catch (buyErr: any) {
             console.error(`❌ [${name}] 매수 실패: ${buyErr.message}`);

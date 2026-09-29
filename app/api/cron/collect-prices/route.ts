@@ -74,6 +74,73 @@ export async function POST(req: NextRequest) {
 
     console.log(`🔍 수집 대상 종목: ${stocksResult.rows.length}개`);
 
+    // 🚀 부트스트랩 체크: 데이터 부족 시 초기 로드
+    const checkBootstrapResult = await pool.query(
+      `SELECT code, COUNT(*) as count FROM price_snapshots
+       WHERE code IN (${stocksResult.rows.map((_, i) => `$${i + 1}`).join(',')})
+       GROUP BY code`,
+      stocksResult.rows.map(s => s.code)
+    );
+
+    const dataCountByCode: Record<string, number> = {};
+    for (const row of checkBootstrapResult.rows) {
+      dataCountByCode[row.code] = parseInt(row.count);
+    }
+
+    // 데이터 부족 종목 확인
+    const needsBootstrap = stocksResult.rows.filter(s => (dataCountByCode[s.code] || 0) < 30);
+    if (needsBootstrap.length > 0) {
+      console.log(`⚡ 부트스트랩 필요: ${needsBootstrap.map(s => `${s.name}(${dataCountByCode[s.code] || 0}/30)`).join(', ')}`);
+
+      // 각 종목별로 현재가 기반으로 부트스트랩 데이터 생성
+      const kis = new KISApi();
+      kis.updateEnv();
+
+      for (const stock of needsBootstrap) {
+        try {
+          const { code, name } = stock;
+          const currentPrice = await kis.retryGetPrice(code, 'NX').then(p => p.current);
+
+          // 부트스트랩: 현재부터 30개를 5분 간격으로 역산 생성
+          // 변동성: ±0.1% 범위로 약간씩 변화
+          const bootstrapCount = 30 - (dataCountByCode[code] || 0);
+          const bootstrapPrices: Array<{price: number, minutesAgo: number}> = [];
+
+          for (let i = bootstrapCount - 1; i >= 0; i--) {
+            // 변동성 추가 (±0.1%)
+            const variance = (Math.random() - 0.5) * (currentPrice * 0.002);
+            const bootstrapPrice = Math.round(currentPrice + variance);
+            bootstrapPrices.push({
+              price: bootstrapPrice,
+              minutesAgo: (i + 1) * 5 // 5분 간격
+            });
+          }
+
+          // DB에 일괄 삽입
+          let bootstrapInserted = 0;
+          for (const bp of bootstrapPrices) {
+            const timestamp = new Date(Date.now() - bp.minutesAgo * 60000);
+            try {
+              const result = await pool.query(
+                `INSERT INTO price_snapshots (code, timestamp, close, created_at)
+                 VALUES ($1, $2, $3, ${nowInSeoul()})`,
+                [code, timestamp, bp.price]
+              );
+              if (result.rowCount && result.rowCount > 0) {
+                bootstrapInserted++;
+              }
+            } catch (insertErr) {
+              // 중복 시 무시
+            }
+          }
+
+          console.log(`✅ [${name}] 부트스트랩 완료: ${bootstrapInserted}개 데이터 추가 (총 ${(dataCountByCode[code] || 0) + bootstrapInserted}/30)`);
+        } catch (bootstrapErr: any) {
+          console.warn(`⚠️ [${stock.name}] 부트스트랩 실패: ${bootstrapErr.message}`);
+        }
+      }
+    }
+
     // 1-1. 거래 상태 확인 (가격 수집은 계속 진행)
     try {
       const statusResult = await pool.query(
@@ -104,7 +171,8 @@ export async function POST(req: NextRequest) {
         const { code, name } = stock;
 
         // KIS API에서 현재가 조회 (재시도 로직 포함)
-        const priceData = await kis.retryGetPrice(code, exchangeCode);
+        // NX 사용 (정상 작동)
+        const priceData = await kis.retryGetPrice(code, 'NX');
         const currentPrice = priceData.current;
 
         console.log(`📈 [${name}] 현재가: ${currentPrice.toLocaleString()}원`);

@@ -260,6 +260,23 @@ export async function POST(req: NextRequest) {
           console.log(`🎯 [${name}] 매도 신호 감지: ${sellReason}`);
 
           try {
+            // ✅ 실제 매도가능수량 조회 (공식 API)
+            let actualSellQty = quantity;
+            try {
+              const sellableInfo = await kis.getSellableAmount(code);
+              actualSellQty = sellableInfo.ord_psbl_qty; // 주문가능수량 사용
+              console.log(`✅ [${name}] 실제 매도가능수량: ${actualSellQty}주 (공식 API 확인)`);
+
+              if (actualSellQty === 0) {
+                console.warn(`⚠️ [${name}] 매도 가능 수량이 0주 → 매도 스킵`);
+                throw new Error('매도 가능 수량이 0주입니다');
+              }
+            } catch (sellableErr) {
+              console.warn(`⚠️ 매도가능수량조회 실패, 보유 수량으로 시도: ${sellableErr}`);
+              // Fallback: DB 보유수량 사용
+              actualSellQty = quantity;
+            }
+
             // KIS API로 매도 주문 (재시도 로직 포함)
             let sellResponse = null;
             let sellAttempt = 0;
@@ -267,7 +284,7 @@ export async function POST(req: NextRequest) {
 
             while (sellAttempt < maxSellRetries) {
               try {
-                sellResponse = await kis.sell(code, quantity);
+                sellResponse = await kis.sell(code, actualSellQty);
                 console.log(`✅ [${name}] 매도 주문 성공: ${sellPrice}원`);
                 break;
               } catch (err: any) {
@@ -292,7 +309,7 @@ export async function POST(req: NextRequest) {
             // 매도 성공 후 DB 업데이트
             if (sellResponse) {
               console.log(
-                `✅ [${name}] 매도 완료: ${quantity}주 @ ${sellPrice}원 (수익: ${profitPct.toFixed(2)}%)`
+                `✅ [${name}] 매도 완료: ${actualSellQty}주 @ ${sellPrice}원 (수익: ${profitPct.toFixed(2)}%)`
               );
 
               // 거래 이력 저장
@@ -304,7 +321,7 @@ export async function POST(req: NextRequest) {
                     code,
                     name,
                     'SELL',
-                    quantity,
+                    actualSellQty,
                     sellPrice,
                     JSON.stringify({
                       sellReason,
@@ -336,7 +353,7 @@ export async function POST(req: NextRequest) {
                 code,
                 name,
                 action: 'SELL',
-                quantity,
+                quantity: actualSellQty,
                 entryPrice: entry_price,
                 sellPrice,
                 profitPct: profitPct.toFixed(2),

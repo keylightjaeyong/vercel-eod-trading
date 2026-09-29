@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { getCurrentExchangeCode } from '@/lib/utils/exchange';
 
 interface TokenResponse {
   access_token: string;
@@ -53,6 +54,18 @@ interface BalanceData {
   evlu_amt_smtl: number;
   evlu_pfls_amt_smtl: number;
   tot_asst_amt: number;
+  estimated_order_amount?: number; // 추정된 주문 가능금액 (85%)
+}
+
+interface OrderableData {
+  ord_psbl_cash: number; // 주문가능현금
+  nrcvb_buy_amt: number; // 미수없는매수금액
+  nrcvb_buy_qty: number; // 미수없는매수수량 ← 실제 매수 가능 수량
+  max_buy_qty: number; // 최대매수수량
+}
+
+interface SellableData {
+  ord_psbl_qty: number; // 주문가능수량 (매도 가능 수량)
 }
 
 export class KISApi {
@@ -368,15 +381,26 @@ export class KISApi {
       const output2Array = response.data.output2 || [];
       const output2 = Array.isArray(output2Array) ? output2Array[0] : output2Array;
 
+      // 📋 주문 가능금액 관련 필드 로깅 (모든 output2 필드 확인)
+      console.log(`📋 [output2 전체 필드] ${JSON.stringify(output2, null, 2)}`);
+
       console.log(`✅ 주식잔고조회 성공: ${holdings.length}개 종목`);
+
+      // 예수금액 계산
+      const dncaTotAmt = parseInt(output2?.dnca_tot_amt || '0', 10);
+
+      // 추정된 주문 가능금액 = 예수금액 × 100% (공격적 전략)
+      const estimatedOrderAmount = dncaTotAmt;
+      console.log(`💰 주문 가능금액: ${dncaTotAmt.toLocaleString()}원 (100% 공격적 전략)`);
 
       return {
         account_id: this.accountId,
         holdings,
-        dnca_tot_amt: parseInt(output2?.dnca_tot_amt || '0', 10), // 예수금
+        dnca_tot_amt: dncaTotAmt,
         evlu_amt_smtl: parseInt(output2?.scts_evlu_amt || '0', 10), // 유가증권 평가금액
         evlu_pfls_amt_smtl: parseInt(output2?.evlu_pfls_smtl_amt || '0', 10), // 평가손익합계
         tot_asst_amt: parseInt(output2?.tot_evlu_amt || '0', 10), // 총평가금액
+        estimated_order_amount: estimatedOrderAmount, // ✅ 추정된 주문 가능금액
       };
     } catch (error: any) {
       const status = error?.response?.status;
@@ -457,23 +481,119 @@ export class KISApi {
 
   /**
    * 현재 시간에 맞는 거래소 선택 (KRX 정규장 vs NXT 야시장)
+   * KST 기준으로 시간대 판단 (exchange.ts의 함수 사용)
    */
   private getExchangeCode(): string {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const dayOfWeek = now.getDay();
+    return getCurrentExchangeCode();
+  }
 
-    // 평일(월~금: 1~5) 정규장 시간 확인
-    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-      // 09:00 ~ 15:30 = 정규장 (KRX)
-      if ((hours === 9 && minutes >= 0) || (hours > 9 && hours < 15) || (hours === 15 && minutes <= 30)) {
-        return 'KRX';
+  /**
+   * 매수가능조회 (공식 권장)
+   * TR_ID: TTTC8908R
+   * 엔드포인트: /uapi/domestic-stock/v1/trading/inquire-psbl-order
+   *
+   * 증거금률, 수수료 등을 모두 반영한 실제 매수 가능 수량을 조회합니다.
+   * @returns nrcvb_buy_qty (미수없는매수수량) - 이 값을 사용해야 함
+   */
+  async getOrderableAmount(code: string, currentPrice: number): Promise<OrderableData> {
+    try {
+      const headers = await this.getHeaders('TTTC8908R');
+      const cano = this.accountId.split('-')[0];
+      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+
+      console.log(`📝 매수가능조회: ${code} @ ${currentPrice}원 (시장가 조회)`);
+
+      const response = await this.client.get(
+        '/uapi/domestic-stock/v1/trading/inquire-psbl-order',
+        {
+          headers,
+          params: {
+            CANO: cano,
+            ACNT_PRDT_CD: acntPrdtCd,
+            PDNO: code,
+            ORD_UNPR: currentPrice.toString(),
+            ORD_DVSN: '01', // 시장가
+            CMA_EVLU_AMT_ICLD_YN: 'Y', // CMA 포함
+            OVRS_ICLD_YN: 'N', // 해외 제외
+          },
+        }
+      );
+
+      if (response.data.rt_cd !== '0') {
+        throw new Error(`매수가능조회 실패: ${response.data.msg1}`);
       }
-    }
 
-    // 그 외: 야시장 (NXT)
-    return 'NXT';
+      const output = response.data.output || {};
+      const orderableData: OrderableData = {
+        ord_psbl_cash: parseInt(output.ord_psbl_cash || '0', 10), // 주문가능현금
+        nrcvb_buy_amt: parseInt(output.nrcvb_buy_amt || '0', 10), // 미수없는매수금액
+        nrcvb_buy_qty: parseInt(output.nrcvb_buy_qty || '0', 10), // 미수없는매수수량 ← 실제 사용값
+        max_buy_qty: parseInt(output.max_buy_qty || '0', 10), // 최대매수수량
+      };
+
+      console.log(`✅ 매수가능조회 성공:`);
+      console.log(`   주문가능현금: ${orderableData.ord_psbl_cash.toLocaleString()}원`);
+      console.log(`   미수없는매수수량: ${orderableData.nrcvb_buy_qty.toLocaleString()}주 ← 이 값 사용!`);
+      console.log(`   최대매수수량: ${orderableData.max_buy_qty.toLocaleString()}주`);
+
+      return orderableData;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const msg = error?.response?.data?.msg1 || error?.message;
+      console.error(`❌ 매수가능조회 실패: status=${status}, msg=${msg}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 매도가능수량조회 (공식 권장)
+   * API: 국내주식-165 / 매도가능수량조회
+   * 실전 TR_ID: TTTC8408R
+   * 엔드포인트: /uapi/domestic-stock/v1/trading/inquire-psbl-order
+   *
+   * @returns ord_psbl_qty (주문가능수량) - 매도 가능 수량
+   */
+  async getSellableAmount(code: string): Promise<SellableData> {
+    try {
+      const headers = await this.getHeaders('TTTC8408R');
+      const cano = this.accountId.split('-')[0];
+      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+
+      console.log(`📝 매도가능수량조회: ${code}`);
+
+      const response = await this.client.get(
+        '/uapi/domestic-stock/v1/trading/inquire-psbl-sell',
+        {
+          headers,
+          params: {
+            CANO: cano,
+            ACNT_PRDT_CD: acntPrdtCd,
+            PDNO: code,
+            ORD_DVSN: '01', // 시장가
+            OVRS_ICLD_YN: 'N', // 해외 제외
+          },
+        }
+      );
+
+      if (response.data.rt_cd !== '0') {
+        throw new Error(`매도가능수량조회 실패: ${response.data.msg1}`);
+      }
+
+      const output = response.data.output || {};
+      const sellableData: SellableData = {
+        ord_psbl_qty: parseInt(output.ord_psbl_qty || '0', 10), // 주문가능수량 ← 매도 가능 수량
+      };
+
+      console.log(`✅ 매도가능수량조회 성공:`);
+      console.log(`   주문가능수량: ${sellableData.ord_psbl_qty.toLocaleString()}주 ← 이 값 사용!`);
+
+      return sellableData;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const msg = error?.response?.data?.msg1 || error?.message;
+      console.error(`❌ 매도가능수량조회 실패: status=${status}, msg=${msg}`);
+      throw error;
+    }
   }
 
   /**
@@ -503,6 +623,7 @@ export class KISApi {
       );
 
       if (response.data.rt_cd !== '0') {
+        console.log(`📋 KIS API 매수 응답:`, JSON.stringify(response.data, null, 2));
         throw new Error(`매수 실패: ${response.data.msg1}`);
       }
 
@@ -510,7 +631,11 @@ export class KISApi {
       return response.data;
     } catch (error: any) {
       const msg = error?.response?.data?.msg1 || error?.message;
+      const fullResponse = error?.response?.data;
       console.error(`❌ 매수 주문 실패 (${code}): ${msg}`);
+      if (fullResponse) {
+        console.error(`📋 전체 응답:`, JSON.stringify(fullResponse, null, 2));
+      }
       throw error;
     }
   }
