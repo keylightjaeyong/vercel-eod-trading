@@ -89,13 +89,17 @@ export class HybridTrading {
   }
 
   /**
-   * 🎯 메인: 매수 신호 생성
-   * 조건 1: 저점 반등 (currentPrice ≥ buyPrice)
-   * 조건 2: 가속도 부호 변화 (음수 → 양수)
+   * 🎯 메인: 매수 신호 생성 (방안 3: 저점 반동 기반)
+   * 조건 1: 저점 반등 (필수) - currentPrice ≥ buyPrice
+   * 조건 2: 가속도 부호 변화 (선택) - 신뢰도에만 영향
+   *
+   * 신뢰도:
+   *   - 반등 + 가속도: 95% (강한 신호)
+   *   - 반등만: 70% (약한 신호)
    */
   static generateBuySignal(
     prices: number[],
-    minRisePct: number = 0.5
+    minRisePct: number = 1.5  // 0.5% → 1.5% (거짓신호 감소)
   ): HybridSignal {
     // 데이터 유효성 검사
     if (prices.length < 4) {
@@ -115,7 +119,7 @@ export class HybridTrading {
     const lowestPrice = this.findLowestPrice(prices);
     const buyPrice = this.calculateBuyPrice(lowestPrice, minRisePct);
 
-    // 조건 1: 저점 반등 확인
+    // 조건 1: 저점 반등 확인 (필수)
     const isRebounced = currentPrice >= buyPrice;
     if (!isRebounced) {
       return {
@@ -130,31 +134,26 @@ export class HybridTrading {
       };
     }
 
+    // ✅ 저점 반등 확인됨! BUY 신호 생성
+    // 이제 가속도는 신뢰도를 결정할 뿐 신호 자체를 막지 않음
+
     // 변화율 계산 (최근 4개)
     const changeRates = this.calculateChangeRates(prices.slice(-4));
     const acceleration = this.calculateAcceleration(changeRates);
 
-    // 조건 2: 가속도 부호 변화 확인
+    // 조건 2: 가속도 부호 변화 확인 (선택 - 신뢰도에만 영향)
     const hasAccelChange = this.detectAccelerationChange(acceleration);
 
-    if (!hasAccelChange) {
-      return {
-        signal: 'HOLD',
-        reason: `가속도 부호 변화 없음 (반등 신호 대기)`,
-        confidence: 30,
-        lowestPrice,
-        buyPrice,
-        currentPrice,
-        changeRate: changeRates,
-        acceleration,
-      };
-    }
+    // 신뢰도 결정
+    const confidence = hasAccelChange ? 95 : 70;
+    const reason = hasAccelChange
+      ? `강한 신호 (저점반등 ${minRisePct}% + 가속도)`
+      : `약한 신호 (저점반등 ${minRisePct}%)`;
 
-    // ✅ 두 조건 모두 만족 → 매수 신호!
     return {
-      signal: 'BUY',
-      reason: `매수 신호 (저점반등 ${minRisePct}% + 가속도 부호변화)`,
-      confidence: 95,
+      signal: 'BUY',  // ✅ 반등만 해도 BUY!
+      reason,
+      confidence,
       lowestPrice,
       buyPrice,
       currentPrice,
