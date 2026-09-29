@@ -181,7 +181,11 @@ export async function POST(req: NextRequest) {
     let errorCount = 0;
     const results: any[] = [];
     const { min_drop } = config.global_settings;
-    const kneeConfig = config.global_settings.knee_shoulder || {};
+    // ✅ kneeConfig에 min_drop을 명시적으로 전달 (UI 설정값 반영)
+    const kneeConfig = {
+      ...config.global_settings.knee_shoulder,
+      min_drop_pct: min_drop || 1.0, // UI의 min_drop을 knee_shoulder에 전달
+    };
     const exchangeCode = getExchangeCode(timeInfo.hour, timeInfo.minute);
     console.log(`🔄 현재 거래소: ${exchangeCode} (${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')})`);
 

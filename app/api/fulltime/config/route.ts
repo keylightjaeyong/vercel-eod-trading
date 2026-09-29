@@ -55,10 +55,10 @@ export async function GET(req: NextRequest) {
           enabled: tradingEnabled,
           pattern_type: 'knee_shoulder',
           knee_shoulder: {
-            min_drop_pct: 2.0,
-            min_rise_pct: 1.0,
+            min_drop_pct: 1.0,        // ✅ UI의 min_drop과 일치
+            min_rise_pct: 0.5,        // ✅ UI의 min_rise와 일치
             search_window: 10,
-            confidence_threshold: 75,
+            confidence_threshold: 30, // ✅ 구현 코드와 일치
             max_history_points: 30,
             trailing_stop_loss_pct: 0.2,
             stop_loss_multiplier: 0.2,
@@ -92,10 +92,10 @@ export async function GET(req: NextRequest) {
           enabled: tradingEnabled,
           pattern_type: 'knee_shoulder',
           knee_shoulder: {
-            min_drop_pct: 2.0,
-            min_rise_pct: 1.0,
+            min_drop_pct: 1.0,        // ✅ UI의 min_drop과 일치
+            min_rise_pct: 0.5,        // ✅ UI의 min_rise와 일치
             search_window: 10,
-            confidence_threshold: 75,
+            confidence_threshold: 30, // ✅ 구현 코드와 일치
             max_history_points: 30,
             trailing_stop_loss_pct: 0.2,
             stop_loss_multiplier: 0.2,
