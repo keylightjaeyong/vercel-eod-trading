@@ -139,9 +139,9 @@ export default function AllocationPage() {
           <div>
             <label className="block text-sm text-gray-400 mb-2">실제 잔고 (원)</label>
             <div className={`rounded px-3 py-2 text-white font-mono text-lg font-semibold border ${
-              actualBalance ? 'bg-green-900 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700'
+              allocation?.total_capital ? 'bg-green-900 border-green-700 text-green-300' : 'bg-gray-900 border-gray-700'
             }`}>
-              {actualBalance ? actualBalance.toLocaleString() : totalCapital.toLocaleString()}
+              {allocation?.total_capital ? allocation.total_capital.toLocaleString() : (actualBalance ? actualBalance.toLocaleString() : totalCapital.toLocaleString())}
             </div>
           </div>
           <div>
