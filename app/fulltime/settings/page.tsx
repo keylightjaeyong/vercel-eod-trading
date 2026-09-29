@@ -389,7 +389,7 @@ export default function SettingsPage() {
               <span className="text-white font-semibold w-12">{settings.search_candles_limit}봉</span>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              어깨 탐색 제한 ({settings.search_candles_limit * 5}분)
+              어깨 탐색 제한 ({(settings.search_candles_limit || 10) * 5}분)
             </p>
           </div>
 
@@ -537,7 +537,7 @@ export default function SettingsPage() {
           <div className="p-3 bg-gray-900 rounded">
             <p className="text-xs text-gray-400">10봉 제한</p>
             <p className="font-semibold text-yellow-400">
-              {settings.search_candles_limit}봉 ({settings.search_candles_limit * 5}분)
+              {settings.search_candles_limit || 10}봉 ({(settings.search_candles_limit || 10) * 5}분)
             </p>
           </div>
           <div className="p-3 bg-gray-900 rounded">
