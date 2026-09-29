@@ -56,7 +56,8 @@ export async function POST(req: NextRequest) {
     await pool.query(`
       INSERT INTO stocks (code, name, enabled) VALUES
       ('005930', '삼성전자', true),
-      ('000660', 'SK하이닉스', true)
+      ('000660', 'SK하이닉스', false),
+      ('003550', 'LG', false)
       ON CONFLICT (code) DO NOTHING
     `);
   } catch (err) {
