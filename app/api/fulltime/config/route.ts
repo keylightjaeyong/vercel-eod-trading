@@ -26,13 +26,20 @@ export async function GET(req: NextRequest) {
 
       if (result.rows.length > 0) {
         const config = JSON.parse(result.rows[0].config_json);
+        // ✅ knee_shoulder 객체를 UI 필드로 변환
+        const globalSettings = config.global_settings || {};
+        const kneeShoulderConfig = globalSettings.knee_shoulder || {};
+
         return NextResponse.json({
           success: true,
           data: {
             ...config,
             global_settings: {
-              ...config.global_settings,
+              ...globalSettings,
               enabled: tradingEnabled,
+              // UI 필드로 변환
+              knee_shoulder_min_drop_pct: kneeShoulderConfig.min_drop_pct ?? 1.0,
+              knee_shoulder_confidence_threshold: kneeShoulderConfig.confidence_threshold ?? 30,
             },
           },
         });
@@ -53,12 +60,14 @@ export async function GET(req: NextRequest) {
           search_candles_limit: 10,
           test_mode: false,
           enabled: tradingEnabled,
+          knee_shoulder_min_drop_pct: 1.0,          // ✅ UI 필드
+          knee_shoulder_confidence_threshold: 30,    // ✅ UI 필드
           pattern_type: 'knee_shoulder',
           knee_shoulder: {
-            min_drop_pct: 1.0,        // ✅ UI의 min_drop과 일치
-            min_rise_pct: 0.5,        // ✅ UI의 min_rise와 일치
+            min_drop_pct: 1.0,
+            min_rise_pct: 0.5,
             search_window: 10,
-            confidence_threshold: 30, // ✅ 구현 코드와 일치
+            confidence_threshold: 30,
             max_history_points: 30,
             trailing_stop_loss_pct: 0.2,
             stop_loss_multiplier: 0.2,
@@ -90,12 +99,14 @@ export async function GET(req: NextRequest) {
           search_candles_limit: 10,
           test_mode: false,
           enabled: tradingEnabled,
+          knee_shoulder_min_drop_pct: 1.0,          // ✅ UI 필드
+          knee_shoulder_confidence_threshold: 30,    // ✅ UI 필드
           pattern_type: 'knee_shoulder',
           knee_shoulder: {
-            min_drop_pct: 1.0,        // ✅ UI의 min_drop과 일치
-            min_rise_pct: 0.5,        // ✅ UI의 min_rise와 일치
+            min_drop_pct: 1.0,
+            min_rise_pct: 0.5,
             search_window: 10,
-            confidence_threshold: 30, // ✅ 구현 코드와 일치
+            confidence_threshold: 30,
             max_history_points: 30,
             trailing_stop_loss_pct: 0.2,
             stop_loss_multiplier: 0.2,
@@ -124,14 +135,33 @@ export async function POST(req: NextRequest) {
     // 환경변수에서 거래 활성화 상태 확인
     const tradingEnabled = process.env.TRADING_ENABLED !== 'false';
 
+    // ✅ UI에서 받은 knee_shoulder 파라미터를 nested 객체로 변환
+    const globalSettings = body.global_settings || {};
+    const kneeShoulderConfig = {
+      min_drop_pct: globalSettings.knee_shoulder_min_drop_pct ?? 1.0,
+      min_rise_pct: globalSettings.min_rise ?? 0.5,
+      search_window: globalSettings.search_window ?? 10,
+      confidence_threshold: globalSettings.knee_shoulder_confidence_threshold ?? 30,
+      max_history_points: 30,
+      trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct ?? 0.2,
+      stop_loss_multiplier: 0.2,
+    };
+
     // enabled는 환경변수에서만 제어, 저장되는 값에는 무시
     const bodyToSave = {
       ...body,
       global_settings: {
         ...body.global_settings,
         enabled: tradingEnabled,
+        knee_shoulder: kneeShoulderConfig,
       },
     };
+
+    console.log('💾 저장할 설정:', {
+      min_drop: globalSettings.min_drop,
+      knee_shoulder_min_drop_pct: globalSettings.knee_shoulder_min_drop_pct,
+      knee_shoulder_confidence_threshold: globalSettings.knee_shoulder_confidence_threshold,
+    });
 
     console.log('💾 설정 저장 시도:', { enabled: tradingEnabled });
 

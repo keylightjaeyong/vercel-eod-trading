@@ -10,6 +10,8 @@ interface GlobalSettings {
   search_candles_limit: number;
   test_mode: boolean;
   enabled: boolean;
+  knee_shoulder_min_drop_pct: number;      // ✅ UI 추가
+  knee_shoulder_confidence_threshold: number; // ✅ UI 추가
 }
 
 export default function SettingsPage() {
@@ -390,6 +392,54 @@ export default function SettingsPage() {
               어깨 탐색 제한 ({settings.search_candles_limit * 5}분)
             </p>
           </div>
+
+          {/* 무릎 낙폭 기준 (V자 패턴) */}
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">
+              무릎 낙폭 기준 (V자 패턴)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="5"
+                step="0.1"
+                value={settings.knee_shoulder_min_drop_pct}
+                onChange={(e) =>
+                  handleSettingChange('knee_shoulder_min_drop_pct', parseFloat(e.target.value))
+                }
+                className="flex-1"
+              />
+              <span className="text-white font-semibold w-12">{settings.knee_shoulder_min_drop_pct.toFixed(1)}%</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              V자 무릎으로 인정하는 최소 낙폭 (권장: 1.0%)
+            </p>
+          </div>
+
+          {/* 신뢰도 필터 */}
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">
+              신뢰도 필터 (%)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={settings.knee_shoulder_confidence_threshold}
+                onChange={(e) =>
+                  handleSettingChange('knee_shoulder_confidence_threshold', parseInt(e.target.value))
+                }
+                className="flex-1"
+              />
+              <span className="text-white font-semibold w-12">{settings.knee_shoulder_confidence_threshold}%</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              매수 신호 발생 시 신뢰도 기준 (권장: 30%)
+            </p>
+          </div>
         </div>
       </div>
 
@@ -482,6 +532,18 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400">손절 배수</p>
             <p className="font-semibold text-red-400">
               {(settings.trailing_stop_loss_pct * 100).toFixed(0)}%
+            </p>
+          </div>
+          <div className="p-3 bg-gray-900 rounded">
+            <p className="text-xs text-gray-400">무릎 낙폭</p>
+            <p className="font-semibold text-orange-400">
+              {settings.knee_shoulder_min_drop_pct.toFixed(1)}%
+            </p>
+          </div>
+          <div className="p-3 bg-gray-900 rounded">
+            <p className="text-xs text-gray-400">신뢰도 필터</p>
+            <p className="font-semibold text-cyan-400">
+              {settings.knee_shoulder_confidence_threshold}%
             </p>
           </div>
           <div className="p-3 bg-gray-900 rounded">
