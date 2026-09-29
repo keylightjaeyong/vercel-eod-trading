@@ -40,8 +40,8 @@ export async function GET(req: NextRequest) {
           data: {
             global_settings: {
               min_rise: globalSettings.min_rise ?? 1.5,
-              stop_loss_pct: sellConfig.stop_loss_pct ?? -3.0,
-              trailing_stop_loss_pct: sellConfig.trailing_stop_loss_pct ?? 0.5,
+              stop_loss_pct: sellConfig.stop_loss_pct ?? -2.0,
+              trailing_stop_loss_pct: sellConfig.trailing_stop_loss_pct ?? 0.2,
               test_mode: globalSettings.test_mode ?? false,
               enabled: tradingEnabled,
             },
@@ -59,8 +59,8 @@ export async function GET(req: NextRequest) {
       data: {
         global_settings: {
           min_rise: 1.5,
-          stop_loss_pct: -3.0,
-          trailing_stop_loss_pct: 0.5,
+          stop_loss_pct: -2.0,
+          trailing_stop_loss_pct: 0.2,
           test_mode: false,
           enabled: tradingEnabled,
         },
@@ -79,8 +79,8 @@ export async function GET(req: NextRequest) {
       data: {
         global_settings: {
           min_rise: 1.5,
-          stop_loss_pct: -3.0,
-          trailing_stop_loss_pct: 0.5,
+          stop_loss_pct: -2.0,
+          trailing_stop_loss_pct: 0.2,
           test_mode: false,
           enabled: tradingEnabled,
         },
@@ -107,8 +107,8 @@ export async function POST(req: NextRequest) {
 
     // 손절 관련 설정
     const sellConfig = {
-      stop_loss_pct: globalSettings.stop_loss_pct ?? -3.0,
-      trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct ?? 0.5,
+      stop_loss_pct: globalSettings.stop_loss_pct ?? -2.0,
+      trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct ?? 0.2,
     };
 
     // 저장할 설정 (GET과 일치하는 구조)
