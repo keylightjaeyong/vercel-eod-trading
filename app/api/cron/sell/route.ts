@@ -219,19 +219,21 @@ export async function POST(req: NextRequest) {
         }
 
         // 2️⃣ 동적 손절매 (수익 보호)
-        // trailing_stop_loss_pct: 최고가에서 올라간 수익의 20% 손실 시
+        // trailing_stop_loss_pct: 최고가에서 올라간 수익의 N% 손실 시
         if (!shouldSell && recentPrices.length > 1) {
+          const trailingStopLossPct = sellConfig.trailing_stop_loss_pct || 0.2;
           const highestPrice = Math.max(...recentPrices);
           const profitFromEntry = highestPrice - entry_price;
 
           const dynamicStopLoss = Math.max(
             entry_price,
-            highestPrice - profitFromEntry * 0.2
+            highestPrice - profitFromEntry * trailingStopLossPct
           );
 
           if (currentPrice <= dynamicStopLoss) {
             shouldSell = true;
-            sellReason = `동적 손절 (최고가 ${highestPrice.toLocaleString()}에서 수익의 20% 손실)`;
+            const trailingPctPercent = (trailingStopLossPct * 100).toFixed(0);
+            sellReason = `동적 손절 (최고가 ${highestPrice.toLocaleString()}에서 수익의 ${trailingPctPercent}% 손실)`;
             console.log(`⛔ ${sellReason}`);
           }
         }

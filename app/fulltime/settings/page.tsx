@@ -6,6 +6,7 @@ interface GlobalSettings {
   min_drop: number;
   min_rise: number;
   search_window: number;
+  stop_loss_pct: number;
   trailing_stop_loss_pct: number;
   search_candles_limit: number;
   test_mode: boolean;
@@ -422,11 +423,47 @@ export default function SettingsPage() {
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-8">
         <h2 className="text-xl font-semibold mb-6">✂️ 손절 조건</h2>
 
-        <div className="grid grid-cols-1 gap-6">
-          {/* 손절 배수 */}
+        <div className="grid grid-cols-2 gap-6">
+          {/* 손절매 (고정 손실 제한) */}
           <div>
             <label className="block text-sm text-gray-400 mb-2">
-              손절 배수 (최고가 기준)
+              손절매 (손실 제한)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="0.5"
+                value={settings.stop_loss_pct}
+                onChange={(e) =>
+                  handleSettingChange('stop_loss_pct', parseFloat(e.target.value))
+                }
+                className="flex-1"
+              />
+              <span className="text-white font-semibold w-12">
+                -{settings.stop_loss_pct.toFixed(1)}%
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              손실이 이 수준에 도달하면 자동 매도 (권장: 5%)
+            </p>
+            <div className="mt-3 p-3 bg-gray-900 rounded text-sm">
+              <p>📌 예시:</p>
+              <p className="text-gray-400">
+                • 진입가: 10,000원 → 현재가:{' '}
+                <span className="text-red-400">
+                  {(10000 * (1 - settings.stop_loss_pct / 100)).toFixed(0)}원
+                </span>
+                {' → 손절매 실행'}
+              </p>
+            </div>
+          </div>
+
+          {/* 동적 손절매 (수익 기반) */}
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">
+              동적 손절매 (수익 보호)
             </label>
             <div className="flex items-center gap-3">
               <input
@@ -482,7 +519,7 @@ export default function SettingsPage() {
       {/* 현재 설정 요약 */}
       <div className="mt-8 p-6 bg-gray-800 border border-gray-700 rounded-lg">
         <h3 className="font-semibold mb-4">📋 현재 설정 요약</h3>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <div className="p-3 bg-gray-900 rounded">
             <p className="text-xs text-gray-400">최소 낙폭</p>
             <p className="font-semibold text-blue-400">{settings.min_drop.toFixed(1)}%</p>
@@ -504,9 +541,15 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="p-3 bg-gray-900 rounded">
-            <p className="text-xs text-gray-400">손절 배수</p>
+            <p className="text-xs text-gray-400">손절매</p>
             <p className="font-semibold text-red-400">
-              {(settings.trailing_stop_loss_pct * 100).toFixed(0)}%
+              -{settings.stop_loss_pct.toFixed(1)}%
+            </p>
+          </div>
+          <div className="p-3 bg-gray-900 rounded">
+            <p className="text-xs text-gray-400">동적 손절</p>
+            <p className="font-semibold text-orange-400">
+              -{(settings.trailing_stop_loss_pct * 100).toFixed(0)}%
             </p>
           </div>
           <div className="p-3 bg-gray-900 rounded">

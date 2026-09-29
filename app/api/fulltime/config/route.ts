@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
         // ✅ knee_shoulder 객체를 UI 필드로 변환
         const globalSettings = config.global_settings || {};
         const kneeShoulderConfig = globalSettings.knee_shoulder || {};
+        const sellConfig = globalSettings.sell || {};
 
         return NextResponse.json({
           success: true,
@@ -39,6 +40,9 @@ export async function GET(req: NextRequest) {
               enabled: tradingEnabled,
               // UI 필드: 신뢰도만 전달 (낙폭은 min_drop으로 통일)
               knee_shoulder_confidence_threshold: kneeShoulderConfig.confidence_threshold ?? 30,
+              // ✅ 손절 관련 필드 추가
+              stop_loss_pct: sellConfig.stop_loss_pct ?? 5.0,
+              trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct ?? 0.2,
             },
           },
         });
@@ -55,7 +59,8 @@ export async function GET(req: NextRequest) {
           min_drop: 1.0,
           min_rise: 0.5,
           search_window: 10,
-          trailing_stop_loss_pct: 0.2,
+          stop_loss_pct: 5.0,                    // ✅ 손절매 UI 필드
+          trailing_stop_loss_pct: 0.2,           // ✅ 동적 손절매 UI 필드
           search_candles_limit: 10,
           test_mode: false,
           enabled: tradingEnabled,
@@ -93,7 +98,8 @@ export async function GET(req: NextRequest) {
           min_drop: 1.0,
           min_rise: 0.5,
           search_window: 10,
-          trailing_stop_loss_pct: 0.2,
+          stop_loss_pct: 5.0,                    // ✅ 손절매 UI 필드
+          trailing_stop_loss_pct: 0.2,           // ✅ 동적 손절매 UI 필드
           search_candles_limit: 10,
           test_mode: false,
           enabled: tradingEnabled,
@@ -132,7 +138,7 @@ export async function POST(req: NextRequest) {
     // 환경변수에서 거래 활성화 상태 확인
     const tradingEnabled = process.env.TRADING_ENABLED !== 'false';
 
-    // ✅ UI에서 받은 knee_shoulder 파라미터를 nested 객체로 변환
+    // ✅ UI에서 받은 파라미터를 nested 객체로 변환
     const globalSettings = body.global_settings || {};
     const kneeShoulderConfig = {
       min_drop_pct: globalSettings.min_drop ?? 1.0,  // UI의 min_drop을 내부적으로 사용
@@ -144,6 +150,12 @@ export async function POST(req: NextRequest) {
       stop_loss_multiplier: 0.2,
     };
 
+    // ✅ 손절 관련 설정
+    const sellConfig = {
+      stop_loss_pct: globalSettings.stop_loss_pct ?? 5.0,
+      trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct ?? 0.2,
+    };
+
     // enabled는 환경변수에서만 제어, 저장되는 값에는 무시
     const bodyToSave = {
       ...body,
@@ -151,11 +163,14 @@ export async function POST(req: NextRequest) {
         ...body.global_settings,
         enabled: tradingEnabled,
         knee_shoulder: kneeShoulderConfig,
+        sell: sellConfig,
       },
     };
 
     console.log('💾 저장할 설정:', {
       min_drop: globalSettings.min_drop,
+      stop_loss_pct: globalSettings.stop_loss_pct,
+      trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct,
       confidence_threshold: globalSettings.knee_shoulder_confidence_threshold,
     });
 
