@@ -256,7 +256,6 @@ export default function SettingsPage() {
         <p className="text-gray-400 mb-6">저점 반등 + 가속도 부호변화 감지</p>
 
         <div className="grid grid-cols-1 gap-6">
-          {/* 최소 반등폭 */}
           <div>
             <label className="block text-sm text-gray-400 mb-2">
               최소 반등폭 (저점 기준)
