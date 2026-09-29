@@ -286,8 +286,28 @@ export async function POST(req: NextRequest) {
             console.log(`💰 [${name}] 할당비율: ${allocationPct}% | 매수가능수량: ${actualBuyQty}주`);
 
             if (actualBuyQty > 0) {
-              // 매수 실행
-              const orderResult = await kis.buy(code, actualBuyQty);
+              // 매수 실행 (재시도 로직 포함)
+              let orderResult: any = null;
+              let buyError: any = null;
+              const maxBuyRetries = 3;
+
+              for (let attempt = 0; attempt < maxBuyRetries; attempt++) {
+                try {
+                  console.log(`📊 [${name}] 매수 시도: ${code} x ${actualBuyQty}주 (${attempt + 1}/${maxBuyRetries})`);
+                  const delay = Math.pow(2, attempt) * 100; // 지수백오프 (100ms, 200ms, 400ms)
+                  if (attempt > 0) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                  }
+                  orderResult = await kis.buy(code, actualBuyQty);
+                  break; // 성공하면 루프 탈출
+                } catch (err) {
+                  buyError = err;
+                  if (attempt === maxBuyRetries - 1) {
+                    throw buyError; // 마지막 시도 실패하면 예외 발생
+                  }
+                  console.warn(`⚠️ [${name}] 매수 시도 실패 (${attempt + 1}/${maxBuyRetries}): ${err instanceof Error ? err.message : String(err)}`);
+                }
+              }
 
               if (orderResult) {
               console.log(
@@ -298,7 +318,7 @@ export async function POST(req: NextRequest) {
               try {
                 await pool.query(
                   `INSERT INTO trade_history (code, name, action, quantity, price, analysis, pattern_signal, pattern_confidence, created_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ${nowInSeoul()})`,
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
                   [
                     code,
                     name,
@@ -324,7 +344,7 @@ export async function POST(req: NextRequest) {
               try {
                 await pool.query(
                   `INSERT INTO trade_positions (code, name, quantity, entry_price, entry_time, status, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, ${nowInSeoul()}, 'holding', ${nowInSeoul()}, ${nowInSeoul()})`,
+                   VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, 'holding', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
                   [code, name, actualBuyQty, currentPrice]
                 );
                 console.log(`✅ [${name}] trade_positions에 등록됨`);

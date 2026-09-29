@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
         code VARCHAR(10) UNIQUE NOT NULL,
         name VARCHAR(100) NOT NULL,
         enabled BOOLEAN DEFAULT true,
+        allocation_pct DECIMAL(5,2) DEFAULT 100,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
