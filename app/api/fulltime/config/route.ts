@@ -38,8 +38,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           success: true,
           data: {
-            ...config,
-            stocks,
             global_settings: {
               min_rise: globalSettings.min_rise ?? 0.5,
               stop_loss_pct: sellConfig.stop_loss_pct ?? 3.0,
@@ -47,6 +45,7 @@ export async function GET(req: NextRequest) {
               test_mode: globalSettings.test_mode ?? false,
               enabled: tradingEnabled,
             },
+            stocks,
           },
         });
       }
