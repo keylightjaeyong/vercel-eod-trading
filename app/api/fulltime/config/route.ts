@@ -26,12 +26,9 @@ export async function GET(req: NextRequest) {
 
       if (result.rows.length > 0) {
         const config = JSON.parse(result.rows[0].config_json);
-        // ✅ knee_shoulder 객체를 UI 필드로 변환
         const globalSettings = config.global_settings || {};
-        const kneeShoulderConfig = globalSettings.knee_shoulder || {};
         const sellConfig = globalSettings.sell || {};
 
-        // ✅ stocks 필드가 없으면 기본값 사용
         const stocks = config.stocks || [
           { code: '000660', name: 'SK하이닉스', enabled: false, allocation_pct: 0 },
           { code: '003550', name: 'LG', enabled: false, allocation_pct: 0 },
@@ -44,13 +41,11 @@ export async function GET(req: NextRequest) {
             ...config,
             stocks,
             global_settings: {
-              ...globalSettings,
+              min_rise: globalSettings.min_rise ?? 0.5,
+              stop_loss_pct: sellConfig.stop_loss_pct ?? 3.0,
+              trailing_stop_loss_pct: sellConfig.trailing_stop_loss_pct ?? 0.2,
+              test_mode: globalSettings.test_mode ?? false,
               enabled: tradingEnabled,
-              // UI 필드: 신뢰도만 전달 (낙폭은 min_drop으로 통일)
-              knee_shoulder_confidence_threshold: kneeShoulderConfig.confidence_threshold ?? 30,
-              // ✅ 손절 관련 필드 추가
-              stop_loss_pct: sellConfig.stop_loss_pct ?? 5.0,
-              trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct ?? 0.2,
             },
           },
         });
@@ -64,31 +59,11 @@ export async function GET(req: NextRequest) {
       success: true,
       data: {
         global_settings: {
-          min_drop: 1.0,
           min_rise: 0.5,
-          search_window: 10,
-          stop_loss_pct: 5.0,                    // ✅ 손절매 UI 필드
-          trailing_stop_loss_pct: 0.2,           // ✅ 동적 손절매 UI 필드
-          search_candles_limit: 10,
+          stop_loss_pct: 3.0,
+          trailing_stop_loss_pct: 0.2,
           test_mode: false,
           enabled: tradingEnabled,
-          knee_shoulder_confidence_threshold: 30,    // ✅ 신뢰도만 UI 필드
-          pattern_type: 'knee_shoulder',
-          knee_shoulder: {
-            min_drop_pct: 1.0,
-            min_rise_pct: 0.5,
-            search_window: 10,
-            confidence_threshold: 30,
-            max_history_points: 30,
-            trailing_stop_loss_pct: 0.2,
-            stop_loss_multiplier: 0.2,
-          },
-          sell: {
-            target_profit_pct: 2.0,
-            stop_loss_pct: 3.0,
-            max_hold_hours: 24,
-            sell_schedule: '06:00-15:30',
-          },
         },
         stocks: [
           { code: '000660', name: 'SK하이닉스', enabled: false, allocation_pct: 0 },
@@ -104,31 +79,11 @@ export async function GET(req: NextRequest) {
       success: true,
       data: {
         global_settings: {
-          min_drop: 1.0,
           min_rise: 0.5,
-          search_window: 10,
-          stop_loss_pct: 5.0,                    // ✅ 손절매 UI 필드
-          trailing_stop_loss_pct: 0.2,           // ✅ 동적 손절매 UI 필드
-          search_candles_limit: 10,
+          stop_loss_pct: 3.0,
+          trailing_stop_loss_pct: 0.2,
           test_mode: false,
           enabled: tradingEnabled,
-          knee_shoulder_confidence_threshold: 30,    // ✅ 신뢰도만 UI 필드
-          pattern_type: 'knee_shoulder',
-          knee_shoulder: {
-            min_drop_pct: 1.0,
-            min_rise_pct: 0.5,
-            search_window: 10,
-            confidence_threshold: 30,
-            max_history_points: 30,
-            trailing_stop_loss_pct: 0.2,
-            stop_loss_multiplier: 0.2,
-          },
-          sell: {
-            target_profit_pct: 2.0,
-            stop_loss_pct: 3.0,
-            max_hold_hours: 24,
-            sell_schedule: '06:00-15:30',
-          },
         },
         stocks: [
           { code: '000660', name: 'SK하이닉스', enabled: false, allocation_pct: 0 },
