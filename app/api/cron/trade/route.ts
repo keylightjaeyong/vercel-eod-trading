@@ -197,6 +197,18 @@ export async function POST(req: NextRequest) {
 
         console.log(`📊 [${name}] 현재가: ${currentPrice.toLocaleString()}원 (거래소코드: NX)`);
 
+        // ⚠️ 현재가 0 체크 (kis.retryGetPrice 실패 시 0 반환 가능)
+        if (currentPrice <= 0) {
+          console.warn(`⚠️ [${name}] 현재가 조회 실패 (${currentPrice}원), 매수 스킵`);
+          results.push({
+            code,
+            name,
+            error: '현재가 조회 실패',
+            status: '❌ 현재가 0원 - 매수 스킵',
+          });
+          continue;
+        }
+
         // 최근 30개 가격 이력 조회 (하이브리드 알고리즘용)
         let prices: number[] = [];
         try {
