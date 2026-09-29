@@ -182,12 +182,7 @@ export async function POST(req: NextRequest) {
     let buyCount = 0;
     let errorCount = 0;
     const results: any[] = [];
-    const { min_drop } = config.global_settings;
-    // ✅ kneeConfig에 min_drop을 명시적으로 전달 (UI 설정값 반영)
-    const kneeConfig = {
-      ...config.global_settings.knee_shoulder,
-      min_drop_pct: min_drop || 1.0, // UI의 min_drop을 knee_shoulder에 전달
-    };
+    const { min_rise } = config.global_settings;
     const exchangeCode = getExchangeCode(timeInfo.hour, timeInfo.minute);
     console.log(`🔄 현재 거래소: ${exchangeCode} (${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')})`);
 
@@ -258,7 +253,7 @@ export async function POST(req: NextRequest) {
         console.log(`   사유: ${hybridSignal.reason}`);
 
         if (shouldBuy) {
-          console.log(`🎯 [${name}] 매수 신호! (신뢰도: ${signal.confidence}%)`);
+          console.log(`🎯 [${name}] 매수 신호! (신뢰도: ${hybridSignal.confidence}%)`);
 
           try {
             // 할당 비율 조회
@@ -311,13 +306,14 @@ export async function POST(req: NextRequest) {
                     actualBuyQty,
                     currentPrice,
                     JSON.stringify({
-                      signal: signal.signal,
-                      reason: signal.reason,
-                      targetPrice: signal.targetPrice,
-                      stopLossPrice: signal.stopLossPrice,
+                      signal: hybridSignal.signal,
+                      reason: hybridSignal.reason,
+                      confidence: hybridSignal.confidence,
+                      lowestPrice: hybridSignal.lowestPrice,
+                      buyPrice: hybridSignal.buyPrice,
                     }),
-                    signal.signal,
-                    signal.confidence,
+                    hybridSignal.signal,
+                    hybridSignal.confidence,
                   ]
                 );
               } catch (saveErr: any) {
@@ -343,9 +339,9 @@ export async function POST(req: NextRequest) {
                 action: 'BUY',
                 quantity: actualBuyQty,
                 price: currentPrice,
-                signal: signal.signal,
-                confidence: signal.confidence,
-                reason: signal.reason,
+                signal: hybridSignal.signal,
+                confidence: hybridSignal.confidence,
+                reason: hybridSignal.reason,
                 status: '✅ 매수 완료',
               });
               }
@@ -365,15 +361,15 @@ export async function POST(req: NextRequest) {
           }
         } else {
           console.log(
-            `⏭️ [${name}] 매수 신호 없음 (${signal.reason})`
+            `⏭️ [${name}] 매수 신호 없음 (${hybridSignal.reason})`
           );
           results.push({
             code,
             name,
             price: currentPrice,
-            signal: signal.signal,
-            confidence: signal.confidence,
-            reason: signal.reason,
+            signal: hybridSignal.signal,
+            confidence: hybridSignal.confidence,
+            reason: hybridSignal.reason,
             status: '⏭️ 신호 없음',
           });
         }
