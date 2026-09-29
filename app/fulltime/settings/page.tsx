@@ -324,7 +324,7 @@ export default function SettingsPage() {
           {/* 최소 상승폭 */}
           <div>
             <label className="block text-sm text-gray-400 mb-2">
-              최소 상승폭 (어깨 조건)
+              최소 상승폭 (반등 조건)
             </label>
             <div className="flex items-center gap-3">
               <input
@@ -341,7 +341,7 @@ export default function SettingsPage() {
               <span className="text-white font-semibold w-12">{settings.min_rise.toFixed(1)}%</span>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              어깨로 인정하는 최소 상승폭 (권장: 0.5%)
+              낙폭 후 충분한 상승폭이 일어났는지 확인 (권장: 0.5%)
             </p>
           </div>
 
@@ -525,7 +525,7 @@ export default function SettingsPage() {
             <p className="font-semibold text-blue-400">{settings.min_drop.toFixed(1)}%</p>
           </div>
           <div className="p-3 bg-gray-900 rounded">
-            <p className="text-xs text-gray-400">최소 상승</p>
+            <p className="text-xs text-gray-400">반등 조건</p>
             <p className="font-semibold text-green-400">{settings.min_rise.toFixed(1)}%</p>
           </div>
           <div className="p-3 bg-gray-900 rounded">
