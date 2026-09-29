@@ -101,8 +101,8 @@ export async function POST(req: NextRequest) {
           const { code, name } = stock;
           const currentPrice = await kis.retryGetPrice(code, 'NX').then(p => p.current);
 
-          // 부트스트랩: 현재부터 30개를 5분 간격으로 역산 생성
-          // 변동성: ±0.1% 범위로 약간씩 변화
+          // 부트스트랩: 이전날 20:00부터 역산해서 30개 5분 간격 데이터 생성
+          // 변동성: ±0.1% 범위로 약간씩 변화 (전일 가격 패턴 모방)
           const bootstrapCount = 30 - (dataCountByCode[code] || 0);
           const bootstrapPrices: Array<{price: number, minutesAgo: number}> = [];
 
@@ -116,10 +116,14 @@ export async function POST(req: NextRequest) {
             });
           }
 
-          // DB에 일괄 삽입
+          // DB에 일괄 삽입 (이전날 20:00 기준)
+          const previousDayEnd = new Date();
+          previousDayEnd.setHours(20, 0, 0, 0);
+          previousDayEnd.setDate(previousDayEnd.getDate() - 1);
+
           let bootstrapInserted = 0;
           for (const bp of bootstrapPrices) {
-            const timestamp = new Date(Date.now() - bp.minutesAgo * 60000);
+            const timestamp = new Date(previousDayEnd.getTime() - bp.minutesAgo * 60000);
             try {
               const result = await pool.query(
                 `INSERT INTO price_snapshots (code, timestamp, close, created_at)
