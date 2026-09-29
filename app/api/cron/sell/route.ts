@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     if (status) {
       tradingEnabled = status.trading_enabled;
       if (!tradingEnabled) {
-        console.log(`⚠️ 거래 중단 상태 (손절매는 계속 작동). 사유: ${status.stopped_reason || '알 수 없음'}`);
+        console.log(`⚠️ 거래 중단 상태. 손절매만 작동합니다. 사유: ${status.stopped_reason || '알 수 없음'}`);
       }
     }
   } catch (err) {
@@ -219,9 +219,9 @@ export async function POST(req: NextRequest) {
           console.log(`⛔ ${sellReason}`);
         }
 
-        // 2️⃣ 동적 손절매 (수익 보호)
+        // 2️⃣ 동적 손절매 (수익 보호) - 최소 3개 데이터 필수
         // trailing_stop_loss_pct: 최고가에서 올라간 수익의 N% 손실 시
-        if (!shouldSell && recentPrices.length > 1) {
+        if (!shouldSell && recentPrices.length > 3) {
           const trailingStopLossPct = sellConfig.trailing_stop_loss_pct || 0.2;
           const highestPrice = Math.max(...recentPrices);
           const profitFromEntry = highestPrice - entry_price;
@@ -245,17 +245,20 @@ export async function POST(req: NextRequest) {
           try {
             // ✅ 실제 매도가능수량 조회 (공식 API)
             let actualSellQty = quantity;
+            let apiSellQty = quantity;
             try {
               const sellableInfo = await kis.getSellableAmount(code);
-              actualSellQty = sellableInfo.ord_psbl_qty; // 주문가능수량 사용
-              console.log(`✅ [${name}] 실제 매도가능수량: ${actualSellQty}주 (공식 API 확인)`);
+              apiSellQty = sellableInfo.ord_psbl_qty; // 주문가능수량 사용
+              // DB 보유수량과 API 수량의 최소값을 사용 (둘 다 만족)
+              actualSellQty = Math.min(quantity, apiSellQty);
+              console.log(`✅ [${name}] 실제 매도가능수량: ${actualSellQty}주 (DB: ${quantity}주, API: ${apiSellQty}주 중 최소값)`);
 
               if (actualSellQty === 0) {
                 console.warn(`⚠️ [${name}] 매도 가능 수량이 0주 → 매도 스킵`);
                 throw new Error('매도 가능 수량이 0주입니다');
               }
             } catch (sellableErr) {
-              console.warn(`⚠️ 매도가능수량조회 실패, 보유 수량으로 시도: ${sellableErr}`);
+              console.warn(`⚠️ 매도가능수량조회 실패, DB 보유 수량(${quantity}주)으로 시도: ${sellableErr}`);
               // Fallback: DB 보유수량 사용
               actualSellQty = quantity;
             }
@@ -299,7 +302,7 @@ export async function POST(req: NextRequest) {
               try {
                 await pool.query(
                   `INSERT INTO trade_history (code, name, action, quantity, price, analysis, created_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, ${nowInSeoul()})`,
+                   VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
                   [
                     code,
                     name,
@@ -319,14 +322,16 @@ export async function POST(req: NextRequest) {
 
               // trade_positions 업데이트
               try {
+                // profit_loss = (판매가 - 진입가) × 수량 (전체 손익)
+                const totalProfitLoss = (sellPrice - entry_price) * actualSellQty;
                 await pool.query(
                   `UPDATE trade_positions
-                   SET status = 'sold', exit_price = $1, exit_time = ${nowInSeoul()},
-                       profit_loss = $2, updated_at = ${nowInSeoul()}
+                   SET status = 'sold', exit_price = $1, exit_time = CURRENT_TIMESTAMP,
+                       profit_loss = $2, updated_at = CURRENT_TIMESTAMP
                    WHERE id = $3`,
-                  [sellPrice, sellPrice - entry_price, id]
+                  [sellPrice, totalProfitLoss, id]
                 );
-                console.log(`✅ [${name}] trade_positions 업데이트 완료`);
+                console.log(`✅ [${name}] trade_positions 업데이트 완료 (실현손익: ${totalProfitLoss.toLocaleString()}원)`);
               } catch (updateErr: any) {
                 console.error(`❌ [${name}] trade_positions 업데이트 실패: ${updateErr.message}`);
               }
