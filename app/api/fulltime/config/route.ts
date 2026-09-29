@@ -102,40 +102,32 @@ export async function POST(req: NextRequest) {
     // 환경변수에서 거래 활성화 상태 확인
     const tradingEnabled = process.env.TRADING_ENABLED !== 'false';
 
-    // ✅ UI에서 받은 파라미터를 nested 객체로 변환
+    // UI에서 받은 파라미터 (5개 필드만)
     const globalSettings = body.global_settings || {};
-    const kneeShoulderConfig = {
-      min_drop_pct: globalSettings.min_drop ?? 1.0,  // UI의 min_drop을 내부적으로 사용
-      min_rise_pct: globalSettings.min_rise ?? 0.5,
-      search_window: globalSettings.search_window ?? 10,
-      confidence_threshold: globalSettings.knee_shoulder_confidence_threshold ?? 30,
-      max_history_points: 30,
-      trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct ?? 0.2,
-      stop_loss_multiplier: 0.2,
-    };
 
-    // ✅ 손절 관련 설정
+    // 손절 관련 설정
     const sellConfig = {
-      stop_loss_pct: globalSettings.stop_loss_pct ?? 5.0,
+      stop_loss_pct: globalSettings.stop_loss_pct ?? 3.0,
       trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct ?? 0.2,
     };
 
-    // enabled는 환경변수에서만 제어, 저장되는 값에는 무시
+    // 저장할 설정 (간단한 구조)
     const bodyToSave = {
-      ...body,
       global_settings: {
-        ...body.global_settings,
+        min_rise: globalSettings.min_rise ?? 0.5,
+        stop_loss_pct: sellConfig.stop_loss_pct,
+        trailing_stop_loss_pct: sellConfig.trailing_stop_loss_pct,
+        test_mode: globalSettings.test_mode ?? false,
         enabled: tradingEnabled,
-        knee_shoulder: kneeShoulderConfig,
-        sell: sellConfig,
       },
+      stocks: body.stocks || [],
     };
 
-    console.log('💾 저장할 설정:', {
-      min_drop: globalSettings.min_drop,
+    console.log('💾 저장할 설정 (하이브리드):', {
+      min_rise: globalSettings.min_rise,
       stop_loss_pct: globalSettings.stop_loss_pct,
       trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct,
-      confidence_threshold: globalSettings.knee_shoulder_confidence_threshold,
+      test_mode: globalSettings.test_mode,
     });
 
     console.log('💾 설정 저장 시도:', { enabled: tradingEnabled });
