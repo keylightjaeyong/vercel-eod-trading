@@ -108,10 +108,10 @@ export async function POST(req: NextRequest) {
     let config: any = {
       global_settings: {
         sell: {
-          target_profit_pct: 2.0,
-          stop_loss_pct: 5.0,
-          max_hold_hours: 24,
-          trailing_stop_loss_pct: 0.2,
+          // ❌ 제거됨: target_profit_pct (상승 중인 종목 매도 방지)
+          // ❌ 제거됨: max_hold_hours (트렌드 중인 종목 강제 매도 방지)
+          stop_loss_pct: 5.0,              // ✅ 손절매
+          trailing_stop_loss_pct: 0.2,    // ✅ 동적 손절매
         },
         knee_shoulder: {
           search_window: 10,
@@ -204,12 +204,13 @@ export async function POST(req: NextRequest) {
           console.log(`⚠️ 가격 이력 조회 실패`);
         }
 
-        // 매도 신호 판정
+        // ✅ 매도 신호 판정 (3가지 조건만)
         let shouldSell = false;
         let sellReason = '';
         let sellPrice = currentPrice;
 
-        // 1️⃣ 10봉(50분) 내 어깨 감지 → 즉시 매도
+        // 1️⃣ 어깨 패턴 감지 (V자 완성 신호)
+        // search_candles_limit: 10봉(50분) 내 반등 감지
         const entryPriceIndex = Math.max(0, recentPrices.length - 11);
         const kneeIndex = entryPriceIndex;
         const shoulderIndex = KneeShoulderPattern.detectShoulder(
@@ -221,35 +222,31 @@ export async function POST(req: NextRequest) {
 
         if (shoulderIndex !== null && shoulderIndex > kneeIndex) {
           shouldSell = true;
-          sellReason = `어깨 패턴 감지 (10봉 내 반등) → 즉시 매도`;
+          sellReason = `어깨 패턴 감지 (V자 완성) → 매도`;
           console.log(`👉 ${sellReason}`);
         }
 
-        // 2️⃣ 손절매 (설정값에서 읽음)
-        // -1.0% 손절매 (사용자 요구사항)
-        const stopLossPct = sellConfig.stop_loss_pct || -1.0;
+        // 2️⃣ 손절매 (손실 제한)
+        // stop_loss_pct: -5% 손실 시 매도
+        const stopLossPct = sellConfig.stop_loss_pct || -5.0;
         if (!shouldSell && profitPct <= stopLossPct) {
           shouldSell = true;
-          sellReason = `${stopLossPct}% 손절매`;
+          sellReason = `손절매 (${stopLossPct}% 손실 제한)`;
           console.log(`⛔ ${sellReason}`);
         }
 
-        // 3️⃣ 동적 손절매: 최고가에서 올라간 수익의 20% 손실 시
+        // 3️⃣ 동적 손절매 (수익 보호)
+        // trailing_stop_loss_pct: 최고가에서 올라간 수익의 20% 손실 시
         if (!shouldSell && recentPrices.length > 1) {
           const highestPrice = Math.max(...recentPrices);
-
-          // 진입 이후 올라간 수익
           const profitFromEntry = highestPrice - entry_price;
 
-          // 최고가에서 수익의 20% 손실 후 손절
           const dynamicStopLoss = Math.max(
-            entry_price, // 항상 진입가 이상
+            entry_price,
             highestPrice - profitFromEntry * 0.2
           );
 
           if (currentPrice <= dynamicStopLoss) {
-            const lossFromHighest =
-              ((highestPrice - currentPrice) / highestPrice) * 100;
             shouldSell = true;
             sellReason = `동적 손절 (최고가 ${highestPrice.toLocaleString()}에서 수익의 20% 손실)`;
             console.log(`⛔ ${sellReason}`);
