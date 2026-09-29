@@ -213,7 +213,7 @@ export async function POST(req: NextRequest) {
           console.log(`⚠️ 가격 이력 조회 실패`);
         }
 
-        // ✅ 매도 신호 판정 (2가지 조건만)
+        // ✅ 매도 신호 판정 (4가지 조건)
         let shouldSell = false;
         let sellReason = '';
         let sellPrice = currentPrice;
@@ -244,6 +244,44 @@ export async function POST(req: NextRequest) {
             const trailingPctPercent = (trailingStopLossPct * 100).toFixed(0);
             sellReason = `동적 손절 (최고가 ${highestPrice.toLocaleString()}에서 수익의 ${trailingPctPercent}% 손실)`;
             console.log(`⛔ ${sellReason}`);
+          }
+        }
+
+        // 3️⃣ 추세 반전 신호 (가속도 부호 변화) - 최소 5개 데이터 필수
+        if (!shouldSell && recentPrices.length >= 5) {
+          try {
+            // 최근 5개 가격으로 가속도 계산
+            const prices_5 = recentPrices.slice(-5);
+
+            // 1차 미분: 속도 (가격 변화량)
+            const velocities = [];
+            for (let i = 0; i < prices_5.length - 1; i++) {
+              velocities.push(prices_5[i + 1] - prices_5[i]);
+            }
+
+            // 2차 미분: 가속도 (속도 변화량)
+            const accelerations = [];
+            for (let i = 0; i < velocities.length - 1; i++) {
+              accelerations.push(velocities[i + 1] - velocities[i]);
+            }
+
+            // 반전 신호 감지: 양수 → 음수 변화
+            if (accelerations.length >= 2) {
+              const prevAccel = accelerations[accelerations.length - 2];
+              const currAccel = accelerations[accelerations.length - 1];
+
+              // 단계 1: 반전 신호 즉시 감지
+              if (prevAccel > 0 && currAccel < 0) {
+                console.log(`⚠️ [${name}] 추세 반전 신호 감지 (단계 1/2): ${prevAccel.toFixed(4)} → ${currAccel.toFixed(4)}`);
+
+                // 단계 2: 반전 확인 (다음 데이터 필요하지만, 현재로선 즉시 매도)
+                shouldSell = true;
+                sellReason = `추세 반전 (가속도: ${prevAccel.toFixed(4)} → ${currAccel.toFixed(4)})`;
+                console.log(`⛔ ${sellReason}`);
+              }
+            }
+          } catch (err) {
+            console.log(`⚠️ [${name}] 추세 반전 신호 계산 실패: ${err}`);
           }
         }
 
