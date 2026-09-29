@@ -111,13 +111,14 @@ export class KISApi {
   }
 
   /**
-   * 토큰 갱신
+   * 토큰 갱신 (유효기간: 1일)
+   * @param forceRefresh - true이면 캐시 무시하고 강제 갱신
    */
-  async getToken(): Promise<string> {
+  async getToken(forceRefresh: boolean = false): Promise<string> {
     const now = Date.now() / 1000;
 
     // 1단계: 로컬 메모리 캐시 확인
-    if (this.accessToken && now < this.tokenExpiry - 60) {
+    if (!forceRefresh && this.accessToken && now < this.tokenExpiry - 60) {
       console.log('✅ 로컬 메모리 캐시 토큰 사용');
       return this.accessToken;
     }
