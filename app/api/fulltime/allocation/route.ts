@@ -28,12 +28,12 @@ export async function GET(req: NextRequest) {
       console.log(`✅ KIS API 조회 성공: ${total_capital.toLocaleString()}원`);
     } catch (kisError: any) {
       const errorMsg = kisError.message || String(kisError);
-      const errorDetail = kisError?.response?.data?.msg || '';
+      const errorDetail = kisError?.response?.data?.msg1 || kisError?.response?.data?.msg || '';
       console.warn(`⚠️ KIS API 조회 실패: ${errorMsg}${errorDetail ? ` (상세: ${errorDetail})` : ''}`);
       console.log(`💡 현재는 기본값 300,000원 사용. 실제 잔고는 KIS 포탈에서 확인하세요.`);
-      console.log(`🔍 에러 상세 진단: msg="${errorDetail}" | 토큰포함=${errorDetail?.includes('token')}`);
+      console.log(`🔍 에러 상세 진단: msg1="${errorDetail}" | 토큰포함=${errorDetail?.includes('token')}`);
 
-      // 토큰 만료 에러이면 DB 토큰 삭제 및 강제 갱신 시도 (msg에서 "token" 포함 확인)
+      // 토큰 만료 에러이면 DB 토큰 삭제 및 강제 갱신 시도 (msg1에서 "token" 포함 확인)
       const isTokenError = errorDetail?.includes('token') || errorMsg?.includes('token');
       if (isTokenError || errorDetail?.includes('EGW00123')) {
         try {
