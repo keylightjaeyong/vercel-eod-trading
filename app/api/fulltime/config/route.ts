@@ -83,8 +83,9 @@ export async function GET(req: NextRequest) {
           },
         },
         stocks: [
-          { code: '000660', name: 'SK하이닉스', enabled: true, allocation_pct: 50 },
-          { code: '005930', name: '삼성전자', enabled: true, allocation_pct: 30 },
+          { code: '000660', name: 'SK하이닉스', enabled: false, allocation_pct: 0 },
+          { code: '003550', name: 'LG', enabled: false, allocation_pct: 0 },
+          { code: '005930', name: '삼성전자', enabled: true, allocation_pct: 100 },
         ],
       },
     });
@@ -122,8 +123,9 @@ export async function GET(req: NextRequest) {
           },
         },
         stocks: [
-          { code: '000660', name: 'SK하이닉스', enabled: true, allocation_pct: 50 },
-          { code: '005930', name: '삼성전자', enabled: true, allocation_pct: 30 },
+          { code: '000660', name: 'SK하이닉스', enabled: false, allocation_pct: 0 },
+          { code: '003550', name: 'LG', enabled: false, allocation_pct: 0 },
+          { code: '005930', name: '삼성전자', enabled: true, allocation_pct: 100 },
         ],
       },
     });
