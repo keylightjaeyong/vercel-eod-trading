@@ -37,8 +37,7 @@ export async function GET(req: NextRequest) {
             global_settings: {
               ...globalSettings,
               enabled: tradingEnabled,
-              // UI 필드로 변환
-              knee_shoulder_min_drop_pct: kneeShoulderConfig.min_drop_pct ?? 1.0,
+              // UI 필드: 신뢰도만 전달 (낙폭은 min_drop으로 통일)
               knee_shoulder_confidence_threshold: kneeShoulderConfig.confidence_threshold ?? 30,
             },
           },
@@ -60,8 +59,7 @@ export async function GET(req: NextRequest) {
           search_candles_limit: 10,
           test_mode: false,
           enabled: tradingEnabled,
-          knee_shoulder_min_drop_pct: 1.0,          // ✅ UI 필드
-          knee_shoulder_confidence_threshold: 30,    // ✅ UI 필드
+          knee_shoulder_confidence_threshold: 30,    // ✅ 신뢰도만 UI 필드
           pattern_type: 'knee_shoulder',
           knee_shoulder: {
             min_drop_pct: 1.0,
@@ -99,8 +97,7 @@ export async function GET(req: NextRequest) {
           search_candles_limit: 10,
           test_mode: false,
           enabled: tradingEnabled,
-          knee_shoulder_min_drop_pct: 1.0,          // ✅ UI 필드
-          knee_shoulder_confidence_threshold: 30,    // ✅ UI 필드
+          knee_shoulder_confidence_threshold: 30,    // ✅ 신뢰도만 UI 필드
           pattern_type: 'knee_shoulder',
           knee_shoulder: {
             min_drop_pct: 1.0,
@@ -138,7 +135,7 @@ export async function POST(req: NextRequest) {
     // ✅ UI에서 받은 knee_shoulder 파라미터를 nested 객체로 변환
     const globalSettings = body.global_settings || {};
     const kneeShoulderConfig = {
-      min_drop_pct: globalSettings.knee_shoulder_min_drop_pct ?? 1.0,
+      min_drop_pct: globalSettings.min_drop ?? 1.0,  // UI의 min_drop을 내부적으로 사용
       min_rise_pct: globalSettings.min_rise ?? 0.5,
       search_window: globalSettings.search_window ?? 10,
       confidence_threshold: globalSettings.knee_shoulder_confidence_threshold ?? 30,
@@ -159,8 +156,7 @@ export async function POST(req: NextRequest) {
 
     console.log('💾 저장할 설정:', {
       min_drop: globalSettings.min_drop,
-      knee_shoulder_min_drop_pct: globalSettings.knee_shoulder_min_drop_pct,
-      knee_shoulder_confidence_threshold: globalSettings.knee_shoulder_confidence_threshold,
+      confidence_threshold: globalSettings.knee_shoulder_confidence_threshold,
     });
 
     console.log('💾 설정 저장 시도:', { enabled: tradingEnabled });
