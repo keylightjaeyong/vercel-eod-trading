@@ -90,12 +90,7 @@ export class HybridTrading {
 
   /**
    * 🎯 메인: 매수 신호 생성 (방안 3: 저점 반동 기반)
-   * 조건 1: 저점 반등 (필수) - currentPrice ≥ buyPrice
-   * 조건 2: 가속도 부호 변화 (선택) - 신뢰도에만 영향
-   *
-   * 신뢰도:
-   *   - 반등 + 가속도: 95% (강한 신호)
-   *   - 반등만: 70% (약한 신호)
+   * 조건: 저점 반등 (필수) - currentPrice ≥ buyPrice (min_rise%)
    */
   static generateBuySignal(
     prices: number[],
@@ -119,7 +114,7 @@ export class HybridTrading {
     const lowestPrice = this.findLowestPrice(prices);
     const buyPrice = this.calculateBuyPrice(lowestPrice, minRisePct);
 
-    // 조건 1: 저점 반등 확인 (필수)
+    // 조건: 저점 반등 확인 (필수)
     const isRebounced = currentPrice >= buyPrice;
     if (!isRebounced) {
       return {
@@ -135,25 +130,13 @@ export class HybridTrading {
     }
 
     // ✅ 저점 반등 확인됨! BUY 신호 생성
-    // 이제 가속도는 신뢰도를 결정할 뿐 신호 자체를 막지 않음
-
-    // 변화율 계산 (최근 4개)
     const changeRates = this.calculateChangeRates(prices.slice(-4));
     const acceleration = this.calculateAcceleration(changeRates);
 
-    // 조건 2: 가속도 부호 변화 확인 (선택 - 신뢰도에만 영향)
-    const hasAccelChange = this.detectAccelerationChange(acceleration);
-
-    // 신뢰도 결정
-    const confidence = hasAccelChange ? 95 : 70;
-    const reason = hasAccelChange
-      ? `강한 신호 (저점반등 ${minRisePct}% + 가속도)`
-      : `약한 신호 (저점반등 ${minRisePct}%)`;
-
     return {
-      signal: 'BUY',  // ✅ 반등만 해도 BUY!
-      reason,
-      confidence,
+      signal: 'BUY',
+      reason: `매수 신호 (저점반등 ${minRisePct}%)`,
+      confidence: 100,
       lowestPrice,
       buyPrice,
       currentPrice,
