@@ -201,6 +201,9 @@ export class KneeShoulderPattern {
 
     // 신뢰도 확인
     if (pattern.confidence < finalConfig.confidence_threshold) {
+      console.log(
+        `⚠️ 신뢰도 필터: ${pattern.confidence}% < ${finalConfig.confidence_threshold}%`
+      );
       return {
         signal: 'WAIT',
         reason: `신뢰도 부족 (${pattern.confidence}% < ${finalConfig.confidence_threshold}%)`,
@@ -211,6 +214,9 @@ export class KneeShoulderPattern {
 
     // 낙폭 확인 (> 비교: 설정값보다 커야 함)
     if (!((pattern.dropPct || 0) > finalConfig.min_drop_pct)) {
+      console.log(
+        `⚠️ 낙폭 필터: ${pattern.dropPct?.toFixed(2)}% <= ${finalConfig.min_drop_pct}%`
+      );
       return {
         signal: 'WAIT',
         reason: `낙폭 부족 (${pattern.dropPct?.toFixed(2)}% <= ${finalConfig.min_drop_pct}%)`,
@@ -231,6 +237,23 @@ export class KneeShoulderPattern {
         pattern,
       };
     }
+
+    // 상승폭 확인 (충분한 반등이 일어났는지) - 중요 필터!
+    const currentRisePct = pattern.risePct || 0;
+    if (currentRisePct < finalConfig.min_rise_pct) {
+      console.log(
+        `⚠️ 상승폭 필터: ${currentRisePct.toFixed(2)}% < ${finalConfig.min_rise_pct}% (반등 약함 - 패턴 무시)`
+      );
+      return {
+        signal: 'WAIT',
+        reason: `상승폭 부족 (${currentRisePct.toFixed(2)}% < ${finalConfig.min_rise_pct}%) - 반등 약함`,
+        confidence: pattern.confidence,
+        pattern,
+      };
+    }
+
+    // ✅ 모든 필터 통과!
+    console.log(`✅ 모든 필터 통과: 낙폭=${pattern.dropPct?.toFixed(2)}%, 상승=${currentRisePct.toFixed(2)}%, 신뢰도=${pattern.confidence}%`);
 
     // 📥 매수 신호!
     const profitTarget = pattern.knee * 1.02; // 2% 수익 목표
