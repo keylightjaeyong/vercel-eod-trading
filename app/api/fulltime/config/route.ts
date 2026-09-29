@@ -111,12 +111,14 @@ export async function POST(req: NextRequest) {
       trailing_stop_loss_pct: globalSettings.trailing_stop_loss_pct ?? 0.2,
     };
 
-    // 저장할 설정 (간단한 구조)
+    // 저장할 설정 (GET과 일치하는 구조)
     const bodyToSave = {
       global_settings: {
         min_rise: globalSettings.min_rise ?? 0.5,
-        stop_loss_pct: sellConfig.stop_loss_pct,
-        trailing_stop_loss_pct: sellConfig.trailing_stop_loss_pct,
+        sell: {
+          stop_loss_pct: sellConfig.stop_loss_pct,
+          trailing_stop_loss_pct: sellConfig.trailing_stop_loss_pct,
+        },
         test_mode: globalSettings.test_mode ?? false,
         enabled: tradingEnabled,
       },

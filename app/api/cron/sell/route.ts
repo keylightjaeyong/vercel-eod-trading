@@ -133,7 +133,15 @@ export async function POST(req: NextRequest) {
       console.log('⚠️ 설정 조회 실패, 기본값 사용');
     }
 
-    const sellConfig = config.global_settings.sell || {};
+    // sell 구조 지원 (기존: global_settings.sell, 폴백: global_settings의 평탄 구조)
+    let sellConfig = config.global_settings.sell || {};
+    if (!sellConfig.stop_loss_pct && config.global_settings.stop_loss_pct) {
+      // 폴백: 이전 평탄 구조 데이터 지원
+      sellConfig = {
+        stop_loss_pct: config.global_settings.stop_loss_pct,
+        trailing_stop_loss_pct: config.global_settings.trailing_stop_loss_pct,
+      };
+    }
     const patternConfig = config.global_settings.knee_shoulder || {};
 
     // 2. 현재 보유 포지션 조회 (trade_positions 테이블에서)
