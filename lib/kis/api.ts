@@ -123,30 +123,34 @@ export class KISApi {
       return this.accessToken;
     }
 
-    // 2단계: 데이터베이스 캐시 토큰 확인
-    try {
-      const { Pool } = await import('pg');
-      const pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false },
-      });
+    // 2단계: 데이터베이스 캐시 토큰 확인 (강제 갱신이 아닐 때만)
+    if (!forceRefresh) {
+      try {
+        const { Pool } = await import('pg');
+        const pool = new Pool({
+          connectionString: process.env.DATABASE_URL,
+          ssl: { rejectUnauthorized: false },
+        });
 
-      const result = await pool.query(
-        `SELECT access_token, expires_at FROM kis_tokens WHERE id = 1`
-      );
-      await pool.end();
+        const result = await pool.query(
+          `SELECT access_token, expires_at FROM kis_tokens WHERE id = 1`
+        );
+        await pool.end();
 
-      if (result.rows.length > 0) {
-        const { access_token, expires_at } = result.rows[0];
-        if (expires_at > now + 60) {
-          console.log('✅ DB 캐시 토큰 사용');
-          this.accessToken = access_token;
-          this.tokenExpiry = expires_at;
-          return access_token;
+        if (result.rows.length > 0) {
+          const { access_token, expires_at } = result.rows[0];
+          if (expires_at > now + 60) {
+            console.log('✅ DB 캐시 토큰 사용');
+            this.accessToken = access_token;
+            this.tokenExpiry = expires_at;
+            return access_token;
+          }
         }
+      } catch (e) {
+        console.log('⚠️ DB 토큰 캐시 조회 실패, 신규 발급으로 진행');
       }
-    } catch (e) {
-      console.log('⚠️ DB 토큰 캐시 조회 실패, 신규 발급으로 진행');
+    } else {
+      console.log('🔄 강제 갱신 모드: 캐시 무시하고 새 토큰 요청');
     }
 
     // 3단계: 새 토큰 요청
