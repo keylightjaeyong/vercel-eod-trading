@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
           },
           sell: {
             target_profit_pct: 2.0,
-            stop_loss_pct: 5.0,
+            stop_loss_pct: 3.0,
             max_hold_hours: 24,
             sell_schedule: '06:00-15:30',
           },
@@ -116,7 +116,7 @@ export async function GET(req: NextRequest) {
           },
           sell: {
             target_profit_pct: 2.0,
-            stop_loss_pct: 5.0,
+            stop_loss_pct: 3.0,
             max_hold_hours: 24,
             sell_schedule: '06:00-15:30',
           },

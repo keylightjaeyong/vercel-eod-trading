@@ -111,8 +111,8 @@ export async function POST(req: NextRequest) {
         sell: {
           // ❌ 제거됨: target_profit_pct (상승 중인 종목 매도 방지)
           // ❌ 제거됨: max_hold_hours (트렌드 중인 종목 강제 매도 방지)
-          stop_loss_pct: 5.0,              // ✅ 손절매
-          trailing_stop_loss_pct: 0.2,    // ✅ 동적 손절매
+          stop_loss_pct: 3.0,              // ✅ 손절매 (-3.0%)
+          trailing_stop_loss_pct: 0.2,    // ✅ 동적 손절매 (20%)
         },
         knee_shoulder: {
           search_window: 10,
