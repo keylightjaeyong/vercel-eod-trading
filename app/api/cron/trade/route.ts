@@ -133,9 +133,8 @@ export async function POST(req: NextRequest) {
     const { enabled } = config.global_settings;
 
     if (!enabled) {
-      console.log('⏸️ 거래 비활성화됨');
-      await pool.end();
-      return NextResponse.json({ success: true, message: '거래 비활성화' });
+      console.log('🛑 매수 신호 중단 (거래 제어: 중지) - 손절매는 계속 작동');
+      return NextResponse.json({ success: true, message: '매수만 중단 (손절매는 작동)' });
     }
 
     // 2. 종목 조회

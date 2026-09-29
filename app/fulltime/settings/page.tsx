@@ -235,9 +235,9 @@ export default function SettingsPage() {
           {/* 주의 메시지 */}
           <div className="mt-4 p-3 bg-red-950 border border-red-700 rounded text-sm text-red-200">
             <p className="font-semibold mb-1">⚠️ 중요 안내:</p>
-            <p>• 거래 중지: 현재 진행 중인 거래는 계속 진행되며, 새로운 거래만 중단됩니다</p>
-            <p>• 재개: 버튼을 다시 클릭하면 거래가 다시 시작됩니다</p>
-            <p>• 모드 전환: 거래 모드는 즉시 전환되지만, 활성화된 거래 루프에는 적용되지 않을 수 있습니다</p>
+            <p>• 🛑 거래 중지: <strong>매수 신호만 중단</strong> (손절매/동적손절매는 계속 작동)</p>
+            <p>• ▶️ 거래 시작: 다시 매수 신호를 받기 시작합니다</p>
+            <p>• 💰 모드 전환: 거래 모드(실제/모의)는 즉시 전환됩니다</p>
           </div>
         </div>
       )}
