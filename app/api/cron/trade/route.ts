@@ -105,8 +105,7 @@ export async function POST(req: NextRequest) {
     let config: any = {
       global_settings: {
         enabled: tradingEnabled,
-        min_drop: 1.0,
-        min_rise: 0.5,
+        min_rise: 1.5,
         search_window: 10,
       },
       stocks: [],
@@ -242,10 +241,10 @@ export async function POST(req: NextRequest) {
           prices = [currentPrice];
         }
 
-        // 🎯 하이브리드 알고리즘: 저점 반등 + 가속도 부호 변화
+        // 🎯 하이브리드 알고리즘: 저점 반등 기반
         const hybridSignal = HybridTrading.generateBuySignal(
           prices,
-          min_rise || 0.5
+          min_rise || 1.5
         );
 
         let shouldBuy = hybridSignal.signal === 'BUY';

@@ -111,8 +111,8 @@ export async function POST(req: NextRequest) {
         sell: {
           // ❌ 제거됨: target_profit_pct (상승 중인 종목 매도 방지)
           // ❌ 제거됨: max_hold_hours (트렌드 중인 종목 강제 매도 방지)
-          stop_loss_pct: 3.0,              // ✅ 손절매 (-3.0%)
-          trailing_stop_loss_pct: 0.2,    // ✅ 동적 손절매 (20%)
+          stop_loss_pct: -3.0,             // ✅ 손절매 (-3.0%)
+          trailing_stop_loss_pct: 0.5,    // ✅ 동적 손절매 (수익의 50%)
         },
         knee_shoulder: {
           search_window: 10,
@@ -219,8 +219,8 @@ export async function POST(req: NextRequest) {
         let sellPrice = currentPrice;
 
         // 1️⃣ 손절매 (손실 제한)
-        // stop_loss_pct: -5% 손실 시 매도
-        const stopLossPct = sellConfig.stop_loss_pct || -5.0;
+        // stop_loss_pct: -3.0% 손실 시 매도
+        const stopLossPct = sellConfig.stop_loss_pct || -3.0;
         if (!shouldSell && profitPct <= stopLossPct) {
           shouldSell = true;
           sellReason = `손절매 (${stopLossPct}% 손실 제한)`;
@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
         // 2️⃣ 동적 손절매 (수익 보호) - 최소 3개 데이터 필수
         // trailing_stop_loss_pct: 최고가에서 올라간 수익의 N% 손실 시
         if (!shouldSell && recentPrices.length > 3) {
-          const trailingStopLossPct = sellConfig.trailing_stop_loss_pct || 0.2;
+          const trailingStopLossPct = sellConfig.trailing_stop_loss_pct || 0.5;
           const highestPrice = Math.max(...recentPrices);
           const profitFromEntry = highestPrice - entry_price;
 
