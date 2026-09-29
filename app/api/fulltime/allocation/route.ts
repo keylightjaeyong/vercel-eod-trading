@@ -32,17 +32,32 @@ export async function GET(req: NextRequest) {
       console.warn(`⚠️ KIS API 조회 실패: ${errorMsg}${errorDetail ? ` (상세: ${errorDetail})` : ''}`);
       console.log(`💡 현재는 기본값 300,000원 사용. 실제 잔고는 KIS 포탈에서 확인하세요.`);
 
-      // 토큰 만료 에러이면 강제 갱신 시도
+      // 토큰 만료 에러이면 DB 토큰 삭제 및 강제 갱신 시도
       const isTokenError = errorMsg?.includes('token') || errorDetail?.includes('token');
       if (isTokenError) {
         try {
-          console.log('🔄 토큰 강제 갱신 시도...');
+          console.log('🔄 토큰 강제 갱신 절차:');
+
+          // 1) DB의 만료된 토큰 삭제
+          console.log('  1️⃣ DB의 만료된 토큰 삭제...');
+          const { Pool } = await import('pg');
+          const dbPool = new Pool({
+            connectionString: process.env.DATABASE_URL,
+            ssl: { rejectUnauthorized: false },
+          });
+
+          await dbPool.query('DELETE FROM kis_tokens WHERE id = 1');
+          await dbPool.end();
+          console.log('  ✅ DB 토큰 삭제 완료');
+
+          // 2) 새 토큰 강제 발급
+          console.log('  2️⃣ 새 토큰 발급 요청...');
           const kis2 = new KISApi();
           kis2.updateEnv();
           await kis2.getToken(true);
-          console.log('✅ 토큰 강제 갱신 완료 (다음 요청부터 적용)');
-        } catch (e) {
-          console.error('❌ 토큰 강제 갱신 실패:', e);
+          console.log('  ✅ 토큰 강제 갱신 완료 (다음 요청부터 적용)');
+        } catch (e: any) {
+          console.error('❌ 토큰 강제 갱신 실패:', e.message || e);
         }
       }
     }
