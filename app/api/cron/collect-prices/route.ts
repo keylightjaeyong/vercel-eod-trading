@@ -73,77 +73,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.log(`🔍 수집 대상 종목: ${stocksResult.rows.length}개`);
-
-    // 🚀 부트스트랩 체크: 데이터 부족 시 초기 로드
-    const checkBootstrapResult = await pool.query(
-      `SELECT code, COUNT(*) as count FROM price_snapshots
-       WHERE code IN (${stocksResult.rows.map((_, i) => `$${i + 1}`).join(',')})
-       GROUP BY code`,
-      stocksResult.rows.map(s => s.code)
-    );
-
-    const dataCountByCode: Record<string, number> = {};
-    for (const row of checkBootstrapResult.rows) {
-      dataCountByCode[row.code] = parseInt(row.count);
-    }
-
-    // 데이터 부족 종목 확인
-    const needsBootstrap = stocksResult.rows.filter(s => (dataCountByCode[s.code] || 0) < 30);
-    if (needsBootstrap.length > 0) {
-      console.log(`⚡ 부트스트랩 필요: ${needsBootstrap.map(s => `${s.name}(${dataCountByCode[s.code] || 0}/30)`).join(', ')}`);
-
-      // 각 종목별로 현재가 기반으로 부트스트랩 데이터 생성
-      const kis = new KISApi();
-      kis.updateEnv();
-
-      for (const stock of needsBootstrap) {
-        try {
-          const { code, name } = stock;
-          const currentPrice = await kis.retryGetPrice(code, 'NX').then(p => p.current);
-
-          // 부트스트랩: 이전날 20:00부터 역산해서 30개 5분 간격 데이터 생성
-          // 변동성: ±0.1% 범위로 약간씩 변화 (전일 가격 패턴 모방)
-          const bootstrapCount = 30 - (dataCountByCode[code] || 0);
-          const bootstrapPrices: Array<{price: number, minutesAgo: number}> = [];
-
-          for (let i = bootstrapCount - 1; i >= 0; i--) {
-            // 변동성 추가 (±0.1%)
-            const variance = (Math.random() - 0.5) * (currentPrice * 0.002);
-            const bootstrapPrice = Math.round(currentPrice + variance);
-            bootstrapPrices.push({
-              price: bootstrapPrice,
-              minutesAgo: (i + 1) * 5 // 5분 간격
-            });
-          }
-
-          // DB에 일괄 삽입 (이전날 20:00 기준)
-          const previousDayEnd = new Date();
-          previousDayEnd.setHours(20, 0, 0, 0);
-          previousDayEnd.setDate(previousDayEnd.getDate() - 1);
-
-          let bootstrapInserted = 0;
-          for (const bp of bootstrapPrices) {
-            const timestamp = new Date(previousDayEnd.getTime() - bp.minutesAgo * 60000);
-            try {
-              const result = await pool.query(
-                `INSERT INTO price_snapshots (code, timestamp, close, created_at)
-                 VALUES ($1, $2, $3, ${nowInSeoul()})`,
-                [code, timestamp, bp.price]
-              );
-              if (result.rowCount && result.rowCount > 0) {
-                bootstrapInserted++;
-              }
-            } catch (insertErr) {
-              // 중복 시 무시
-            }
-          }
-
-          console.log(`✅ [${name}] 부트스트랩 완료: ${bootstrapInserted}개 데이터 추가 (총 ${(dataCountByCode[code] || 0) + bootstrapInserted}/30)`);
-        } catch (bootstrapErr: any) {
-          console.warn(`⚠️ [${stock.name}] 부트스트랩 실패: ${bootstrapErr.message}`);
-        }
-      }
-    }
+    console.log(`📊 모드: 순수 실시간 수집 (부트스트랩 비활성화)`);
 
     // 1-1. 거래 상태 확인 (가격 수집은 계속 진행)
     try {
