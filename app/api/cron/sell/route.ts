@@ -204,29 +204,12 @@ export async function POST(req: NextRequest) {
           console.log(`⚠️ 가격 이력 조회 실패`);
         }
 
-        // ✅ 매도 신호 판정 (3가지 조건만)
+        // ✅ 매도 신호 판정 (2가지 조건만)
         let shouldSell = false;
         let sellReason = '';
         let sellPrice = currentPrice;
 
-        // 1️⃣ 어깨 패턴 감지 (V자 완성 신호)
-        // search_candles_limit: 10봉(50분) 내 반등 감지
-        const entryPriceIndex = Math.max(0, recentPrices.length - 11);
-        const kneeIndex = entryPriceIndex;
-        const shoulderIndex = KneeShoulderPattern.detectShoulder(
-          recentPrices,
-          kneeIndex,
-          entry_price,
-          10 // 10봉 탐색
-        );
-
-        if (shoulderIndex !== null && shoulderIndex > kneeIndex) {
-          shouldSell = true;
-          sellReason = `어깨 패턴 감지 (V자 완성) → 매도`;
-          console.log(`👉 ${sellReason}`);
-        }
-
-        // 2️⃣ 손절매 (손실 제한)
+        // 1️⃣ 손절매 (손실 제한)
         // stop_loss_pct: -5% 손실 시 매도
         const stopLossPct = sellConfig.stop_loss_pct || -5.0;
         if (!shouldSell && profitPct <= stopLossPct) {
@@ -235,7 +218,7 @@ export async function POST(req: NextRequest) {
           console.log(`⛔ ${sellReason}`);
         }
 
-        // 3️⃣ 동적 손절매 (수익 보호)
+        // 2️⃣ 동적 손절매 (수익 보호)
         // trailing_stop_loss_pct: 최고가에서 올라간 수익의 20% 손실 시
         if (!shouldSell && recentPrices.length > 1) {
           const highestPrice = Math.max(...recentPrices);
