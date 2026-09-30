@@ -285,7 +285,7 @@ export async function POST(req: NextRequest) {
             let actualBuyQty = 0;
             try {
               const orderableInfo = await kis.getOrderableAmount(code, currentPrice);
-              actualBuyQty = orderableInfo.nrcvb_buy_qty; // 미수없는매수수량 사용
+              actualBuyQty = Math.max(0, orderableInfo.nrcvb_buy_qty || 0); // 음수/null 방지
               console.log(`✅ [${name}] 실제 매수가능수량: ${actualBuyQty}주 (공식 API 확인)`);
             } catch (orderableErr) {
               console.warn(`⚠️ 매수가능조회 실패, 추정값으로 계산: ${orderableErr}`);
