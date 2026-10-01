@@ -139,15 +139,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: '매수만 중단 (손절매는 작동)' });
     }
 
-    // 2. 종목 조회
-    const stocksResult = await pool.query(
-      'SELECT code, name FROM stocks WHERE enabled = true LIMIT 10'
-    );
+    // 2. 종목 조회 (config에서 직접 읽음)
+    const stocks = (config.stocks || []).filter((s: any) => s.enabled);
 
-    if (stocksResult.rows.length === 0) {
+    if (stocks.length === 0) {
       console.log('📭 활성화된 종목 없음');
       // 커넥션풀 사용 → pool.end() 호출 안 함
-      return NextResponse.json({ success: true, message: '종목 없음' });
+      return NextResponse.json({
+        success: true,
+        message: '0개 종목 처리 (매수: 0건, 오류: 0건)',
+        results: []
+      });
     }
 
     console.log(`🚀 거래 시작: ${stocksResult.rows.length}개 종목`);
@@ -186,7 +188,7 @@ export async function POST(req: NextRequest) {
     console.log(`🔄 현재 거래소: ${exchangeCode} (${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')})`);
 
     // 4. 각 종목별 매수/매도 로직
-    for (const stock of stocksResult.rows) {
+    for (const stock of stocks) {
       try {
         const { code, name } = stock;
 
