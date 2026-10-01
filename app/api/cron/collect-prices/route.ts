@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
         const insertResult = await pool.query(
           `INSERT INTO price_snapshots
            (code, timestamp, close, created_at)
-           VALUES ($1, ${nowInSeoul()}, $2, ${nowInSeoul()})`,
+           VALUES ($1, CURRENT_TIMESTAMP, $2, CURRENT_TIMESTAMP)`,
           [code, currentPrice]
         );
 
