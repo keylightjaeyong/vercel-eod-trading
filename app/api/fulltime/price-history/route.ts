@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
         EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Seoul') as hour,
         EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Seoul') as minute
       FROM price_snapshots
-      WHERE DATE(created_at AT TIME ZONE 'Asia/Seoul') = CURRENT_DATE AT TIME ZONE 'Asia/Seoul'
-      ORDER BY code, created_at ASC
+      WHERE DATE(COALESCE(timestamp, created_at) AT TIME ZONE 'Asia/Seoul') = CURRENT_DATE AT TIME ZONE 'Asia/Seoul'
+      ORDER BY code, COALESCE(timestamp, created_at) ASC
     `);
 
     // 코드별로 그룹화
