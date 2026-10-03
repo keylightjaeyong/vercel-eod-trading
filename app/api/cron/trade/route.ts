@@ -1,14 +1,116 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { KISApi } from '@/lib/kis/api';
-import { KneeShoulderPattern } from '@/lib/patterns/knee-shoulder';
 import { HybridTrading } from '@/lib/patterns/hybrid-trading';
 import { getExchangeCode, isTradingTime } from '@/lib/utils/exchange';
 import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
 import { getPostgresPool } from '@/lib/db/pool';
+import { calculateADX, calculatePlusDI, calculateMinusDI } from '@/lib/indicators/adx';
+import { getMarketRegime, getRisePercent, getStopLossPct, getTrailingStopPct, getRegimeConfig } from '@/lib/patterns/market-regime';
 
 // ⏱️ Vercel 함수 실행 제한 설정 (최대 30초)
 // 10개 종목을 2~3초씩 순차 처리 가능 (30초 / 10개 = 3초/종목)
 export const maxDuration = 30;
+
+/**
+ * 손절매 워처: -2% 이상 손실되면 즉시 매도
+ * 우선순위 1 (가장 먼저 실행)
+ */
+async function checkStopLoss(pool: any, kis: any) {
+  try {
+    const positions = await pool.query(
+      `SELECT id, code, name, entry_price, stop_loss_pct FROM trade_positions WHERE status = 'holding'`
+    );
+
+    for (const pos of positions.rows) {
+      try {
+        const currentPrice = await kis.retryGetPrice(pos.code, 'NX');
+        const price = currentPrice.current || 0;
+
+        if (price <= 0) continue;
+
+        const lossPct = ((price - pos.entry_price) / pos.entry_price) * 100;
+        const stopLoss = pos.stop_loss_pct || -2.0;
+
+        if (lossPct <= stopLoss) {
+          console.log(`🔴 손절매: ${pos.name} @ ${price}원 (손실: ${lossPct.toFixed(2)}%)`);
+
+          // 매도 실행
+          await kis.sell(pos.code, 1);
+
+          // DB 업데이트
+          await pool.query(
+            `UPDATE trade_positions
+             SET status = 'sold', exit_price = $1, exit_time = NOW(),
+                 profit_loss = $2, updated_at = NOW()
+             WHERE id = $3`,
+            [price, (price - pos.entry_price) * 1, pos.id]
+          );
+
+          return; // 한 번에 하나만 처리
+        }
+      } catch (err) {
+        console.warn(`⚠️ 손절매 체크 오류 (${pos.name}):`, err);
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ 손절매 워처 오류:', err);
+  }
+}
+
+/**
+ * 동적 추적 손절: 고점에서 일정% 하락하면 매도
+ * 우선순위 2
+ */
+async function checkTrailingStop(pool: any, kis: any) {
+  try {
+    const positions = await pool.query(
+      `SELECT id, code, name, entry_price, highest_price, trailing_pct FROM trade_positions WHERE status = 'holding'`
+    );
+
+    for (const pos of positions.rows) {
+      try {
+        const currentPrice = await kis.retryGetPrice(pos.code, 'NX');
+        const price = currentPrice.current || 0;
+
+        if (price <= 0) continue;
+
+        // 최고가 업데이트
+        const highestPrice = pos.highest_price || pos.entry_price;
+        if (price > highestPrice) {
+          await pool.query(
+            `UPDATE trade_positions SET highest_price = $1 WHERE id = $2`,
+            [price, pos.id]
+          );
+        }
+
+        // 동적 추적 손절 확인
+        const trailingStopPrice = highestPrice * (1 - (pos.trailing_pct || 0.3) / 100);
+        if (price <= trailingStopPrice) {
+          const profitPct = ((price - pos.entry_price) / pos.entry_price) * 100;
+          console.log(`📊 추적손절: ${pos.name} (고점: ${highestPrice.toFixed(0)}원, 현재: ${price.toFixed(0)}원, 수익: ${profitPct.toFixed(2)}%)`);
+
+          // 매도 실행
+          await kis.sell(pos.code, 1);
+
+          // DB 업데이트
+          await pool.query(
+            `UPDATE trade_positions
+             SET status = 'sold', exit_price = $1, exit_time = NOW(),
+                 profit_loss = $2, updated_at = NOW()
+             WHERE id = $3`,
+            [price, (price - pos.entry_price) * 1, pos.id]
+          );
+
+          return; // 한 번에 하나만 처리
+        }
+      } catch (err) {
+        console.warn(`⚠️ 추적손절 체크 오류 (${pos.name}):`, err);
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ 동적 추적 손절 오류:', err);
+  }
+}
 
 export async function POST(req: NextRequest) {
   const timeInfo = getKSTTimeInfo();
@@ -17,7 +119,7 @@ export async function POST(req: NextRequest) {
   const pool = getPostgresPool();
 
   try {
-    // 자동 테이블 생성
+    // 자동 테이블 생성 및 컬럼 추가
     await pool.query(`
       CREATE TABLE IF NOT EXISTS stocks (
         id SERIAL PRIMARY KEY,
@@ -28,6 +130,16 @@ export async function POST(req: NextRequest) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // trade_positions 테이블에 새 컬럼 추가 (없으면 추가)
+    try {
+      await pool.query(`ALTER TABLE trade_positions ADD COLUMN IF NOT EXISTS market_regime VARCHAR(20)`);
+      await pool.query(`ALTER TABLE trade_positions ADD COLUMN IF NOT EXISTS stop_loss_pct DECIMAL(5, 2) DEFAULT -2.0`);
+      await pool.query(`ALTER TABLE trade_positions ADD COLUMN IF NOT EXISTS trailing_pct DECIMAL(5, 2) DEFAULT 0.3`);
+      await pool.query(`ALTER TABLE trade_positions ADD COLUMN IF NOT EXISTS highest_price DECIMAL(10, 2)`);
+    } catch (alterErr) {
+      console.log('⚠️ 테이블 컬럼 추가 시도:', alterErr);
+    }
     await pool.query(`
       CREATE TABLE IF NOT EXISTS price_snapshots (
         id SERIAL PRIMARY KEY,
@@ -152,7 +264,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    console.log(`🚀 거래 시작: ${stocksResult.rows.length}개 종목`);
+    console.log(`🚀 거래 시작: ${stocks.length}개 종목`);
 
     // 3. KIS API 초기화 및 계좌 정보 조회
     const kis = new KISApi();
@@ -183,11 +295,19 @@ export async function POST(req: NextRequest) {
     let buyCount = 0;
     let errorCount = 0;
     const results: any[] = [];
-    const { min_rise } = config.global_settings;
     const exchangeCode = getExchangeCode(timeInfo.hour, timeInfo.minute);
     console.log(`🔄 현재 거래소: ${exchangeCode} (${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')})`);
 
-    // 4. 각 종목별 매수/매도 로직
+    // 1️⃣ 손절매 워처 (우선순위 1)
+    console.log('🔍 손절매 워처 실행...');
+    await checkStopLoss(pool, kis);
+
+    // 2️⃣ 동적 추적 손절 (우선순위 2)
+    console.log('🔍 동적 추적 손절 체크...');
+    await checkTrailingStop(pool, kis);
+
+    // 3️⃣ 각 종목별 매수 신호 생성 (우선순위 3)
+    // 4. 각 종목별 매수 로직
     for (const stock of stocks) {
       try {
         const { code, name } = stock;
@@ -210,63 +330,83 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // 최근 30개 가격 이력 조회 (하이브리드 알고리즘용)
+        // 📊 최근 72개 5분봉 조회 (6시간 거래 데이터)
         let prices: number[] = [];
+        let marketRegime: any = 'SIDEWAYS';
+        let risePercent: number = 0.8;
+        let stopLossPct: number = -1.5;
+        let trailingStopPct: number = -0.2;
+
         try {
           const priceHistoryResult = await pool.query(
             `SELECT close FROM price_snapshots
              WHERE code = $1
              ORDER BY timestamp DESC
-             LIMIT 30`,
+             LIMIT 72`,
             [code]
           );
 
-          // 📊 데이터량 로깅
-          console.log(`📈 [${name}] DB 저장 데이터: ${priceHistoryResult.rows.length}개 봉`);
-
-          if (priceHistoryResult.rows.length > 0) {
+          if (priceHistoryResult.rows.length >= 72) {
+            // 72개 이상 있으면 정렬 후 ADX 계산
             prices = priceHistoryResult.rows
               .reverse()
               .map(r => parseFloat(r.close));
-            // 현재가 추가 (최신)
-            prices.push(currentPrice);
-            console.log(`   ├─ 총 분석 데이터: ${prices.length}개 (저장 ${priceHistoryResult.rows.length}개 + 현재가 1개)`);
-            console.log(`   ├─ 저점 추적: ${priceHistoryResult.rows.length >= 4 ? '✅ 가능' : '⏳ 불충분'} (최소 4개 필요)`);
-            console.log(`   └─ 정확도: ${priceHistoryResult.rows.length >= 20 ? '📊 높음 (20개+)' : priceHistoryResult.rows.length >= 10 ? '📊 중간 (10개+)' : '📊 낮음'}`);
+
+            // ADX, ±DI 계산 (최근 14개 기반)
+            const ADX = calculateADX(prices.slice(-14));
+            const plusDI = calculatePlusDI(prices.slice(-14));
+            const minusDI = calculateMinusDI(prices.slice(-14));
+
+            // 시장 체제 판단
+            marketRegime = getMarketRegime(ADX, plusDI, minusDI);
+            risePercent = getRisePercent(marketRegime);
+            stopLossPct = getStopLossPct(marketRegime);
+            trailingStopPct = getTrailingStopPct(marketRegime);
+
+            console.log(`📊 [${name}] ADX=${ADX.toFixed(2)}, +DI=${plusDI.toFixed(2)}, -DI=${minusDI.toFixed(2)}`);
+            console.log(`🔍 시장 체제: ${marketRegime}, 반등: ${risePercent}%, 손절: ${stopLossPct}%, 추적: ${trailingStopPct}%`);
+          } else if (priceHistoryResult.rows.length > 0) {
+            // 72개 미만이면 사용 가능한 데이터로만 계산
+            prices = priceHistoryResult.rows
+              .reverse()
+              .map(r => parseFloat(r.close));
+
+            console.log(`⚠️ [${name}] 데이터 부족 (${priceHistoryResult.rows.length}/72개) - 횡보장으로 가정`);
           } else {
-            console.log(`   └─ price_snapshots 비어있음 (부트스트랩 또는 수집 대기 필요)`);
-            // 가격 이력 없으면 현재가만 사용
-            prices = [currentPrice];
+            console.log(`⚠️ [${name}] 가격 데이터 없음`);
+            prices = [];
           }
         } catch (err) {
           console.log(`⚠️ [${name}] 가격 이력 조회 실패: ${err}`);
-          prices = [currentPrice];
+          prices = [];
         }
 
-        // 🎯 하이브리드 알고리즘: 저점 반등 기반
-        const hybridSignal = HybridTrading.generateBuySignal(
-          prices,
-          min_rise || 1.5
-        );
+        // 데이터 부족하면 스킵
+        if (prices.length < 14) {
+          console.log(`❌ [${name}] 데이터 부족 (${prices.length}/14개), 매수 스킵`);
+          results.push({
+            code,
+            name,
+            price: currentPrice,
+            status: '❌ 데이터 부족',
+          });
+          continue;
+        }
 
-        let shouldBuy = hybridSignal.signal === 'BUY';
+        // 72개 저점 계산
+        const lowestPrice = Math.min(...prices);
+        const buyPrice = lowestPrice * (1 + risePercent / 100);
+
+        // 매수 신호 판단
+        let shouldBuy = currentPrice >= buyPrice;
 
         console.log(
-          `💡 [${name}] 하이브리드 신호: ${hybridSignal.signal} (신뢰도: ${hybridSignal.confidence}%)`
+          `💡 [${name}] 저점: ${lowestPrice.toFixed(0)}원 → 매수기준: ${buyPrice.toFixed(0)}원 → 현재: ${currentPrice.toFixed(0)}원`
         );
-        console.log(
-          `   저점: ${hybridSignal.lowestPrice.toFixed(2)}원 → 매수기준: ${hybridSignal.buyPrice.toFixed(2)}원 → 현재: ${hybridSignal.currentPrice.toFixed(2)}원`
-        );
-        console.log(
-          `   변화율: ${hybridSignal.changeRate.map(r => r.toFixed(2) + '%').join(' → ')}`
-        );
-        console.log(
-          `   가속도: ${hybridSignal.acceleration.map(a => a.toFixed(4)).join(' → ')}`
-        );
-        console.log(`   사유: ${hybridSignal.reason}`);
+        console.log(`   시장: ${marketRegime}, 신호: ${shouldBuy ? '✅ 매수' : '❌ 대기'}`);
 
         if (shouldBuy) {
-          console.log(`🎯 [${name}] 매수 신호! (신뢰도: ${hybridSignal.confidence}%)`);
+          console.log(`🎯 [${name}] 매수 신호! (시장: ${marketRegime})`);
 
           try {
             // 할당 비율 조회
@@ -327,11 +467,12 @@ export async function POST(req: NextRequest) {
                 `✅ [${name}] 매수 완료: ${actualBuyQty}주 @ ${currentPrice}원`
               );
 
-              // 거래 이력 저장 (패턴 정보 포함)
+              // 거래 이력 저장 (ADX 정보 포함)
               try {
                 await pool.query(
-                  `INSERT INTO trade_history (code, name, action, quantity, price, analysis, pattern_signal, pattern_confidence, created_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+                  `INSERT INTO trade_history
+                   (code, name, action, quantity, price, analysis, market_regime, created_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
                   [
                     code,
                     name,
@@ -339,14 +480,12 @@ export async function POST(req: NextRequest) {
                     actualBuyQty,
                     currentPrice,
                     JSON.stringify({
-                      signal: hybridSignal.signal,
-                      reason: hybridSignal.reason,
-                      confidence: hybridSignal.confidence,
-                      lowestPrice: hybridSignal.lowestPrice,
-                      buyPrice: hybridSignal.buyPrice,
+                      marketRegime: marketRegime,
+                      lowestPrice: lowestPrice,
+                      buyPrice: buyPrice,
+                      risePercent: risePercent,
                     }),
-                    hybridSignal.signal,
-                    hybridSignal.confidence,
+                    marketRegime,
                   ]
                 );
               } catch (saveErr: any) {
@@ -356,11 +495,14 @@ export async function POST(req: NextRequest) {
               // trade_positions에 추가 (DB 통합)
               try {
                 await pool.query(
-                  `INSERT INTO trade_positions (code, name, quantity, entry_price, entry_time, status, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, 'holding', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-                  [code, name, actualBuyQty, currentPrice]
+                  `INSERT INTO trade_positions
+                   (code, name, quantity, entry_price, entry_time, status, market_regime,
+                    stop_loss_pct, trailing_pct, highest_price, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, 'holding', $5, $6, $7, $8,
+                           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+                  [code, name, actualBuyQty, currentPrice, marketRegime, stopLossPct, trailingStopPct, currentPrice]
                 );
-                console.log(`✅ [${name}] trade_positions에 등록됨`);
+                console.log(`✅ [${name}] trade_positions에 등록됨 (시장: ${marketRegime})`);
               } catch (posErr: any) {
                 console.error(`❌ [${name}] trade_positions 저장 실패: ${posErr.message}`);
               }
@@ -372,9 +514,8 @@ export async function POST(req: NextRequest) {
                 action: 'BUY',
                 quantity: actualBuyQty,
                 price: currentPrice,
-                signal: hybridSignal.signal,
-                confidence: hybridSignal.confidence,
-                reason: hybridSignal.reason,
+                marketRegime: marketRegime,
+                risePercent: risePercent,
                 status: '✅ 매수 완료',
               });
               }
@@ -394,15 +535,14 @@ export async function POST(req: NextRequest) {
           }
         } else {
           console.log(
-            `⏭️ [${name}] 매수 신호 없음 (${hybridSignal.reason})`
+            `⏭️ [${name}] 매수 신호 없음 (시장: ${marketRegime}, 현재 ${currentPrice.toFixed(0)} < 기준 ${buyPrice.toFixed(0)})`
           );
           results.push({
             code,
             name,
             price: currentPrice,
-            signal: hybridSignal.signal,
-            confidence: hybridSignal.confidence,
-            reason: hybridSignal.reason,
+            marketRegime: marketRegime,
+            risePercent: risePercent,
             status: '⏭️ 신호 없음',
           });
         }
