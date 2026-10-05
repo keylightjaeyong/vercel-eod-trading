@@ -120,16 +120,18 @@ async function checkTrailingStop(pool: any, kis: any) {
 }
 
 export async function POST(req: NextRequest) {
-  // 🔐 보안: CRON_SECRET 검증
-  const cronSecret = req.headers.get('Authorization');
-  const expectedSecret = process.env.CRON_SECRET || 'dev-secret';
+  // 🔐 보안: Vercel Cron IP 검증
+  if (process.env.NODE_ENV === 'production') {
+    const clientIp = req.headers.get('x-forwarded-for') || '';
+    const allowedCronIps = (process.env.ALLOWED_CRON_IPS || '').split(',').filter(Boolean);
 
-  if (cronSecret !== `Bearer ${expectedSecret}`) {
-    console.error('❌ 인증 실패: 유효하지 않은 CRON_SECRET');
-    return NextResponse.json(
-      { success: false, error: '인증 실패' },
-      { status: 401 }
-    );
+    if (allowedCronIps.length > 0 && !allowedCronIps.some(ip => clientIp.includes(ip.trim()))) {
+      console.error(`❌ 인증 실패: 허용되지 않은 IP (${clientIp})`);
+      return NextResponse.json(
+        { success: false, error: '인증 실패' },
+        { status: 401 }
+      );
+    }
   }
 
   const timeInfo = getKSTTimeInfo();
