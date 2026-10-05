@@ -6,8 +6,21 @@ import { nowInSeoul } from '@/lib/utils/timezone';
  * POST /api/test/insert-v-pattern
  * 테스트용 V자 패턴 데이터 30개 삽입
  * TRADING_ENABLED=false 상태에서만 사용!
+ * 🔐 인증이 필요합니다
  */
 export async function POST(req: NextRequest) {
+  // 🔐 보안: 테스트 엔드포인트 인증
+  const adminSecret = req.headers.get('X-Admin-Secret');
+  const expectedSecret = process.env.ADMIN_SECRET || 'dev-admin-secret';
+
+  if (adminSecret !== expectedSecret) {
+    console.error('❌ 테스트 엔드포인트 인증 실패');
+    return NextResponse.json(
+      { success: false, error: '인증 실패 - X-Admin-Secret 필요' },
+      { status: 401 }
+    );
+  }
+
   const pool = getPostgresPool();
 
   try {

@@ -14,6 +14,18 @@ export const maxDuration = 30;
  * 보유 포지션의 매도 신호 판정
  */
 export async function POST(req: NextRequest) {
+  // 🔐 보안: CRON_SECRET 검증
+  const cronSecret = req.headers.get('Authorization');
+  const expectedSecret = process.env.CRON_SECRET || 'dev-secret';
+
+  if (cronSecret !== `Bearer ${expectedSecret}`) {
+    console.error('❌ 인증 실패: 유효하지 않은 CRON_SECRET');
+    return NextResponse.json(
+      { success: false, error: '인증 실패' },
+      { status: 401 }
+    );
+  }
+
   const timeInfo = getKSTTimeInfo();
   console.log(`📤 매도 처리 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 

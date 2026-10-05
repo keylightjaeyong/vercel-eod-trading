@@ -18,7 +18,7 @@ export const maxDuration = 30;
 async function checkStopLoss(pool: any, kis: any) {
   try {
     const positions = await pool.query(
-      `SELECT id, code, name, entry_price, stop_loss_pct FROM trade_positions WHERE status = 'holding'`
+      `SELECT id, code, name, quantity, entry_price, stop_loss_pct FROM trade_positions WHERE status = 'holding'`
     );
 
     for (const pos of positions.rows) {
@@ -32,18 +32,20 @@ async function checkStopLoss(pool: any, kis: any) {
         const stopLoss = pos.stop_loss_pct || -2.0;
 
         if (lossPct <= stopLoss) {
-          console.log(`🔴 손절매: ${pos.name} @ ${price}원 (손실: ${lossPct.toFixed(2)}%)`);
+          console.log(`🔴 손절매: ${pos.name} @ ${price}원 (손실: ${lossPct.toFixed(2)}%) - ${pos.quantity}주 매도`);
 
-          // 매도 실행
-          await kis.sell(pos.code, 1);
+          // 매도 실행 (전체 수량 매도)
+          const quantity = parseInt(pos.quantity) || 1;
+          await kis.sell(pos.code, quantity);
 
-          // DB 업데이트
+          // DB 업데이트 (total profit/loss 계산)
+          const totalProfitLoss = (price - pos.entry_price) * quantity;
           await pool.query(
             `UPDATE trade_positions
              SET status = 'sold', exit_price = $1, exit_time = NOW(),
                  profit_loss = $2, updated_at = NOW()
              WHERE id = $3`,
-            [price, (price - pos.entry_price) * 1, pos.id]
+            [price, totalProfitLoss, pos.id]
           );
 
           return; // 한 번에 하나만 처리
@@ -64,7 +66,7 @@ async function checkStopLoss(pool: any, kis: any) {
 async function checkTrailingStop(pool: any, kis: any) {
   try {
     const positions = await pool.query(
-      `SELECT id, code, name, entry_price, highest_price, trailing_pct FROM trade_positions WHERE status = 'holding'`
+      `SELECT id, code, name, quantity, entry_price, highest_price, trailing_pct FROM trade_positions WHERE status = 'holding'`
     );
 
     for (const pos of positions.rows) {
@@ -75,30 +77,35 @@ async function checkTrailingStop(pool: any, kis: any) {
         if (price <= 0) continue;
 
         // 최고가 업데이트
-        const highestPrice = pos.highest_price || pos.entry_price;
+        let highestPrice = parseFloat(pos.highest_price) || parseFloat(pos.entry_price) || 0;
         if (price > highestPrice) {
+          highestPrice = price;
           await pool.query(
             `UPDATE trade_positions SET highest_price = $1 WHERE id = $2`,
-            [price, pos.id]
+            [highestPrice, pos.id]
           );
         }
 
-        // 동적 추적 손절 확인
-        const trailingStopPrice = highestPrice * (1 - (pos.trailing_pct || 0.3) / 100);
+        // 동적 추적 손절 확인 (trailing_pct는 음수로 저장되므로 절댓값 사용)
+        const trailingPctAbs = Math.abs(parseFloat(pos.trailing_pct) || 0.3);
+        const trailingStopPrice = highestPrice * (1 - trailingPctAbs / 100);
+
         if (price <= trailingStopPrice) {
           const profitPct = ((price - pos.entry_price) / pos.entry_price) * 100;
-          console.log(`📊 추적손절: ${pos.name} (고점: ${highestPrice.toFixed(0)}원, 현재: ${price.toFixed(0)}원, 수익: ${profitPct.toFixed(2)}%)`);
+          console.log(`📊 추적손절: ${pos.name} (고점: ${highestPrice.toFixed(0)}원, 현재: ${price.toFixed(0)}원, 수익: ${profitPct.toFixed(2)}%) - ${pos.quantity}주 매도`);
 
-          // 매도 실행
-          await kis.sell(pos.code, 1);
+          // 매도 실행 (전체 수량 매도)
+          const quantity = parseInt(pos.quantity) || 1;
+          await kis.sell(pos.code, quantity);
 
-          // DB 업데이트
+          // DB 업데이트 (total profit/loss 계산)
+          const totalProfitLoss = (price - pos.entry_price) * quantity;
           await pool.query(
             `UPDATE trade_positions
              SET status = 'sold', exit_price = $1, exit_time = NOW(),
                  profit_loss = $2, updated_at = NOW()
              WHERE id = $3`,
-            [price, (price - pos.entry_price) * 1, pos.id]
+            [price, totalProfitLoss, pos.id]
           );
 
           return; // 한 번에 하나만 처리
@@ -113,6 +120,18 @@ async function checkTrailingStop(pool: any, kis: any) {
 }
 
 export async function POST(req: NextRequest) {
+  // 🔐 보안: CRON_SECRET 검증
+  const cronSecret = req.headers.get('Authorization');
+  const expectedSecret = process.env.CRON_SECRET || 'dev-secret';
+
+  if (cronSecret !== `Bearer ${expectedSecret}`) {
+    console.error('❌ 인증 실패: 유효하지 않은 CRON_SECRET');
+    return NextResponse.json(
+      { success: false, error: '인증 실패' },
+      { status: 401 }
+    );
+  }
+
   const timeInfo = getKSTTimeInfo();
   console.log(`🔄 자동 거래 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 
@@ -390,6 +409,17 @@ export async function POST(req: NextRequest) {
             price: currentPrice,
             status: '❌ 데이터 부족',
           });
+          continue;
+        }
+
+        // 🔴 이미 보유 중인지 확인 (중복 매수 방지)
+        const existingPos = await pool.query(
+          `SELECT id FROM trade_positions WHERE code = $1 AND status = 'holding'`,
+          [code]
+        );
+
+        if (existingPos.rows.length > 0) {
+          console.log(`⏳ [${name}] 이미 보유 중이므로 매수 스킵`);
           continue;
         }
 
