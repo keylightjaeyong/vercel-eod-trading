@@ -441,18 +441,10 @@ export async function POST(req: NextRequest) {
               console.warn(`⚠️ 할당비율 조회 실패, 기본값 100% 사용: ${err}`);
             }
 
-            // ✅ 실제 매수가능수량 조회 (공식 API - 증거금률, 수수료 반영)
-            let actualBuyQty = 0;
-            try {
-              const orderableInfo = await kis.getOrderableAmount(code, currentPrice);
-              actualBuyQty = Math.max(0, orderableInfo.nrcvb_buy_qty || 0); // 음수/null 방지
-              console.log(`✅ [${name}] 실제 매수가능수량: ${actualBuyQty}주 (공식 API 확인)`);
-            } catch (orderableErr) {
-              console.warn(`⚠️ 매수가능조회 실패, 추정값으로 계산: ${orderableErr}`);
-              // Fallback: 기존 추정 방식 사용
-              const allocAmount = Math.floor(orderableAmount * (allocationPct / 100));
-              actualBuyQty = Math.floor(allocAmount / currentPrice);
-            }
+            // 할당 비율에 따른 매수 수량 계산 (일관된 관리)
+            const allocAmount = Math.floor(orderableAmount * (allocationPct / 100));
+            const actualBuyQty = Math.floor(allocAmount / currentPrice);
+            console.log(`💰 [${name}] 할당비율 ${allocationPct}% 적용 → 할당액: ${allocAmount.toLocaleString()}원 → 매수수량: ${actualBuyQty}주`);
 
             console.log(`💰 [${name}] 할당비율: ${allocationPct}% | 매수가능수량: ${actualBuyQty}주`);
 
