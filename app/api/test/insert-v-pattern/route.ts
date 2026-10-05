@@ -9,20 +9,6 @@ import { nowInSeoul } from '@/lib/utils/timezone';
  * 🔐 인증이 필요합니다
  */
 export async function POST(req: NextRequest) {
-  // 🔐 보안: 테스트 엔드포인트 IP 검증 (로컬호스트만)
-  if (process.env.NODE_ENV === 'production') {
-    const clientIp = req.headers.get('x-forwarded-for') || '';
-    const isLocalhost = clientIp === '127.0.0.1' || clientIp === 'localhost' || clientIp.startsWith('::1');
-
-    if (!isLocalhost) {
-      console.error(`❌ 테스트 엔드포인트 접근 거부: ${clientIp}`);
-      return NextResponse.json(
-        { success: false, error: '로컬호스트에서만 접근 가능' },
-        { status: 403 }
-      );
-    }
-  }
-
   const pool = getPostgresPool();
 
   try {
