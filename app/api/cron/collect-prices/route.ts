@@ -16,6 +16,15 @@ export async function POST(req: NextRequest) {
   const timeInfo = getKSTTimeInfo();
   console.log(`📊 가격 수집 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 
+  // 거래 시간 확인 (08:00-20:00 KST)
+  if (timeInfo.hour < 8 || timeInfo.hour >= 20) {
+    console.log(`⏸️ 거래 시간 외 (${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}) - 데이터 수집 스킵`);
+    return NextResponse.json({
+      success: true,
+      message: `거래 시간 외 (${timeInfo.hour}:00-20:00) - 수집 스킵`,
+    });
+  }
+
   const pool = getPostgresPool();
 
   try {
