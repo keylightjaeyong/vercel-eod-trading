@@ -201,8 +201,8 @@ export class KISApi {
   /**
    * 요청 헤더 생성
    */
-  private async getHeaders(trId: string): Promise<Record<string, string>> {
-    const token = await this.getToken();
+  private async getHeaders(trId: string, forceRefresh: boolean = false): Promise<Record<string, string>> {
+    const token = await this.getToken(forceRefresh);
 
     const headers = {
       'content-type': 'application/json; charset=utf-8',
@@ -216,53 +216,122 @@ export class KISApi {
   }
 
   /**
-   * 현재가 조회
+   * 인증 실패 감지 헬퍼
    */
-  async getPrice(code: string, market: string = 'NX'): Promise<PriceData> {
+  private isAuthError(err: any): boolean {
+    const status = err?.response?.status;
+    const errorMsg = err?.response?.data?.msg1 || err?.message || '';
+
+    return (
+      status === 401 ||
+      status === 403 ||
+      errorMsg.includes('인증') ||
+      errorMsg.includes('토큰') ||
+      errorMsg.includes('token') ||
+      errorMsg.includes('unauthorized') ||
+      errorMsg.includes('만료')
+    );
+  }
+
+  /**
+   * 인증 실패 시 토큰 갱신 및 재시도 헬퍼
+   */
+  private async retryWithTokenRefresh<T>(
+    operation: (forceRefresh?: boolean) => Promise<T>,
+    operationName: string
+  ): Promise<T> {
     try {
-      const headers = await this.getHeaders('FHKST01010100');
-
-      const response = await this.client.get('/uapi/domestic-stock/v1/quotations/inquire-price', {
-        headers,
-        params: {
-          FID_COND_MRKT_DIV_CODE: market,
-          FID_INPUT_ISCD: code,
-        },
-      });
-
-      const output = response.data.output || {};
-
-      return {
-        code,
-        name: output.hts_kor_isnm || '',
-        current: parseInt(output.stck_prpr || '0', 10),
-        bid: parseInt(output.bidp1 || '0', 10),
-        ask: parseInt(output.askp1 || '0', 10),
-        bid_qty: parseInt(output.bidp_rsqn1 || '0', 10),
-        ask_qty: parseInt(output.askp_rsqn1 || '0', 10),
-      };
-    } catch (error) {
-      console.error(`가격 조회 실패 (${code}):`, error);
-      throw error;
+      return await operation(false);
+    } catch (err: any) {
+      if (this.isAuthError(err)) {
+        console.warn(`🔐 ${operationName} - 인증 실패 감지 - 토큰 강제 갱신 및 재시도`);
+        try {
+          return await operation(true);
+        } catch (retryErr: any) {
+          console.error(`❌ ${operationName} - 토큰 갱신 후에도 실패: ${retryErr.message}`);
+          throw retryErr;
+        }
+      }
+      throw err;
     }
   }
 
   /**
+   * 현재가 조회
+   */
+  async getPrice(code: string, market: string = 'NX'): Promise<PriceData> {
+    return this.retryWithTokenRefresh(
+      async (forceRefresh?: boolean) => {
+        const headers = await this.getHeaders('FHKST01010100', forceRefresh);
+
+        const response = await this.client.get('/uapi/domestic-stock/v1/quotations/inquire-price', {
+          headers,
+          params: {
+            FID_COND_MRKT_DIV_CODE: market,
+            FID_INPUT_ISCD: code,
+          },
+        });
+
+        const output = response.data.output || {};
+
+        return {
+          code,
+          name: output.hts_kor_isnm || '',
+          current: parseInt(output.stck_prpr || '0', 10),
+          bid: parseInt(output.bidp1 || '0', 10),
+          ask: parseInt(output.askp1 || '0', 10),
+          bid_qty: parseInt(output.bidp_rsqn1 || '0', 10),
+          ask_qty: parseInt(output.askp_rsqn1 || '0', 10),
+        };
+      },
+      `현재가 조회 (${code})`
+    );
+  }
+
+  /**
    * 재시도 로직이 포함된 현재가 조회
-   * 네트워크 에러/타임아웃 시 지수백오프로 자동 재시도
+   * 네트워크 에러/타임아웃/인증실패 시 자동 재시도
+   * 인증 실패(401) 시 토큰 강제 갱신 후 재시도
    * @param code 종목 코드
    * @param market 거래소 (NX=나스닥/NQ, KRX=한국거래소)
    * @param maxRetries 최대 재시도 횟수 (기본: 3회)
    */
   async retryGetPrice(code: string, market: string = 'NX', maxRetries: number = 3): Promise<PriceData> {
     let lastError: any;
+    let tokenRefreshed = false;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         console.log(`📡 현재가 조회 시도: ${code} (${attempt + 1}/${maxRetries})`);
         return await this.getPrice(code, market);
-      } catch (err) {
+      } catch (err: any) {
         lastError = err;
+        const status = err?.response?.status;
+        const errorMsg = err?.response?.data?.msg1 || err?.message || '';
+
+        // 401 인증 실패 또는 토큰 관련 에러 감지
+        const isAuthError =
+          status === 401 ||
+          status === 403 ||
+          errorMsg.includes('인증') ||
+          errorMsg.includes('토큰') ||
+          errorMsg.includes('token') ||
+          errorMsg.includes('unauthorized');
+
+        if (isAuthError && !tokenRefreshed && attempt < maxRetries - 1) {
+          console.warn(`🔐 [${code}] 인증 실패 감지 (${status}) - 토큰 강제 갱신 및 재시도`);
+
+          try {
+            // 토큰 강제 갱신
+            await this.getToken(true);
+            tokenRefreshed = true;
+            console.log(`✅ [${code}] 토큰 갱신 완료 - 즉시 재시도`);
+            continue; // 다음 루프로 진행 (delay 없이)
+          } catch (tokenErr: any) {
+            console.error(`❌ [${code}] 토큰 갱신 실패: ${tokenErr.message}`);
+            lastError = tokenErr;
+          }
+        }
 
         if (attempt < maxRetries - 1) {
           // 지수백오프: 1초, 2초, 4초...
@@ -283,55 +352,53 @@ export class KISApi {
    * 공식 문서: 투자계좌자산현황조회 API (CTRP6548R)
    */
   async getAccount(): Promise<AccountData> {
-    try {
-      const headers = await this.getHeaders('CTRP6548R');
+    return this.retryWithTokenRefresh(
+      async (forceRefresh?: boolean) => {
+        const headers = await this.getHeaders('CTRP6548R', forceRefresh);
 
-      const cano = this.accountId.split('-')[0];
-      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+        const cano = this.accountId.split('-')[0];
+        const acntPrdtCd = this.accountId.split('-')[1] || '01';
 
-      console.log(`📝 KIS 요청: CANO=${cano}, ACNT=${acntPrdtCd}, AUTH=${headers.authorization ? 'YES' : 'NO'}, APPKEY=${headers.appkey ? 'YES' : 'NO'}`);
+        console.log(`📝 KIS 요청: CANO=${cano}, ACNT=${acntPrdtCd}, AUTH=${headers.authorization ? 'YES' : 'NO'}, APPKEY=${headers.appkey ? 'YES' : 'NO'}`);
 
-      const response = await this.client.get(
-        '/uapi/domestic-stock/v1/trading/inquire-account-balance',
-        {
-          headers,
-          params: {
-            CANO: cano,
-            ACNT_PRDT_CD: acntPrdtCd,
-            INQR_DVSN_1: '',
-            BSPR_BF_DT_APLY_YN: '',
-          },
+        const response = await this.client.get(
+          '/uapi/domestic-stock/v1/trading/inquire-account-balance',
+          {
+            headers,
+            params: {
+              CANO: cano,
+              ACNT_PRDT_CD: acntPrdtCd,
+              INQR_DVSN_1: '',
+              BSPR_BF_DT_APLY_YN: '',
+            },
+          }
+        );
+
+        console.log(`✅ KIS 응답: status=${response.status}, rt_cd=${response.data.rt_cd}, msg=${response.data.msg1}`);
+
+        // 응답 상태 확인
+        if (response.data.rt_cd !== '0') {
+          throw new Error(`KIS API 에러: ${response.data.msg1}`);
         }
-      );
 
-      console.log(`✅ KIS 응답: status=${response.status}, rt_cd=${response.data.rt_cd}, msg=${response.data.msg1}`);
+        const output2 = response.data.output2 || {};
 
-      // 응답 상태 확인
-      if (response.data.rt_cd !== '0') {
-        throw new Error(`KIS API 에러: ${response.data.msg1}`);
-      }
-
-      const output2 = response.data.output2 || {};
-
-      return {
-        account_id: this.accountId,
-        balance: parseInt(output2.dncl_amt || '0', 10), // 예수금액 (현금)
-        evaluating: parseInt(output2.evlu_amt_smtl || '0', 10), // 평가금액합계
-        profit_loss: parseInt(output2.evlu_pfls_amt_smtl || '0', 10), // 평가손익금액합계
-        profit_rate:
-          parseInt(output2.evlu_amt_smtl || '0', 10) > 0
-            ? (parseInt(output2.evlu_pfls_amt_smtl || '0', 10) /
-                parseInt(output2.evlu_amt_smtl || '0', 10)) *
-              100
-            : 0,
-        holding_qty: parseInt(output2.hldg_qty || '0', 10), // 보유수량
-      };
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const msg = error?.response?.data?.msg1 || error?.response?.statusText || error?.message;
-      console.error(`❌ KIS API 에러: status=${status}, msg=${msg}`);
-      throw error;
-    }
+        return {
+          account_id: this.accountId,
+          balance: parseInt(output2.dncl_amt || '0', 10), // 예수금액 (현금)
+          evaluating: parseInt(output2.evlu_amt_smtl || '0', 10), // 평가금액합계
+          profit_loss: parseInt(output2.evlu_pfls_amt_smtl || '0', 10), // 평가손익금액합계
+          profit_rate:
+            parseInt(output2.evlu_amt_smtl || '0', 10) > 0
+              ? (parseInt(output2.evlu_pfls_amt_smtl || '0', 10) /
+                  parseInt(output2.evlu_amt_smtl || '0', 10)) *
+                100
+              : 0,
+          holding_qty: parseInt(output2.hldg_qty || '0', 10), // 보유수량
+        };
+      },
+      '계좌 정보 조회'
+    );
   }
 
   /**
@@ -341,78 +408,76 @@ export class KISApi {
    * 엔드포인트: /uapi/domestic-stock/v1/trading/inquire-balance
    */
   async getBalance(): Promise<BalanceData> {
-    try {
-      const headers = await this.getHeaders('TTTC8434R');
+    return this.retryWithTokenRefresh(
+      async (forceRefresh?: boolean) => {
+        const headers = await this.getHeaders('TTTC8434R', forceRefresh);
 
-      const cano = this.accountId.split('-')[0];
-      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+        const cano = this.accountId.split('-')[0];
+        const acntPrdtCd = this.accountId.split('-')[1] || '01';
 
-      console.log(`📝 주식잔고조회: CANO=${cano}, ACNT=${acntPrdtCd}`);
+        console.log(`📝 주식잔고조회: CANO=${cano}, ACNT=${acntPrdtCd}`);
 
-      const response = await this.client.get(
-        '/uapi/domestic-stock/v1/trading/inquire-balance',
-        {
-          headers,
-          params: {
-            CANO: cano,
-            ACNT_PRDT_CD: acntPrdtCd,
-            INQR_DVSN_1: '1',
-            INQR_DVSN_2: '0',
-            CTX_AREA_FK100: '',
-            CTX_AREA_NK100: '',
-          },
+        const response = await this.client.get(
+          '/uapi/domestic-stock/v1/trading/inquire-balance',
+          {
+            headers,
+            params: {
+              CANO: cano,
+              ACNT_PRDT_CD: acntPrdtCd,
+              INQR_DVSN_1: '1',
+              INQR_DVSN_2: '0',
+              CTX_AREA_FK100: '',
+              CTX_AREA_NK100: '',
+            },
+          }
+        );
+
+        // 응답 상태 확인
+        if (response.data.rt_cd !== '0') {
+          throw new Error(`주식잔고조회 실패: ${response.data.msg1}`);
         }
-      );
 
-      // 응답 상태 확인
-      if (response.data.rt_cd !== '0') {
-        throw new Error(`주식잔고조회 실패: ${response.data.msg1}`);
-      }
+        // output1: 보유종목 배열 파싱
+        const output1 = response.data.output1 || [];
+        const holdings: BalanceHolding[] = output1.map((item: any) => ({
+          pdno: item.pdno || '',
+          prdt_name: item.prdt_name || '',
+          hldg_qty: parseInt(item.hldg_qty || '0', 10),
+          pchs_avg_pric: parseInt(item.pchs_avg_pric || '0', 10),
+          prpr: parseInt(item.prpr || '0', 10),
+          evlu_amt: parseInt(item.evlu_amt || '0', 10),
+          evlu_pfls_amt: parseInt(item.evlu_pfls_amt || '0', 10),
+          evlu_pfls_rt: parseFloat(item.evlu_pfls_rt || '0'),
+        }));
 
-      // output1: 보유종목 배열 파싱
-      const output1 = response.data.output1 || [];
-      const holdings: BalanceHolding[] = output1.map((item: any) => ({
-        pdno: item.pdno || '',
-        prdt_name: item.prdt_name || '',
-        hldg_qty: parseInt(item.hldg_qty || '0', 10),
-        pchs_avg_pric: parseInt(item.pchs_avg_pric || '0', 10),
-        prpr: parseInt(item.prpr || '0', 10),
-        evlu_amt: parseInt(item.evlu_amt || '0', 10),
-        evlu_pfls_amt: parseInt(item.evlu_pfls_amt || '0', 10),
-        evlu_pfls_rt: parseFloat(item.evlu_pfls_rt || '0'),
-      }));
+        // output2: 계좌 요약정보 파싱 (배열의 첫 요소)
+        const output2Array = response.data.output2 || [];
+        const output2 = Array.isArray(output2Array) ? output2Array[0] : output2Array;
 
-      // output2: 계좌 요약정보 파싱 (배열의 첫 요소)
-      const output2Array = response.data.output2 || [];
-      const output2 = Array.isArray(output2Array) ? output2Array[0] : output2Array;
+        // 📋 주문 가능금액 관련 필드 로깅 (모든 output2 필드 확인)
+        console.log(`📋 [output2 전체 필드] ${JSON.stringify(output2, null, 2)}`);
 
-      // 📋 주문 가능금액 관련 필드 로깅 (모든 output2 필드 확인)
-      console.log(`📋 [output2 전체 필드] ${JSON.stringify(output2, null, 2)}`);
+        console.log(`✅ 주식잔고조회 성공: ${holdings.length}개 종목`);
 
-      console.log(`✅ 주식잔고조회 성공: ${holdings.length}개 종목`);
+        // 예수금액 계산
+        const dncaTotAmt = parseInt(output2?.dnca_tot_amt || '0', 10);
 
-      // 예수금액 계산
-      const dncaTotAmt = parseInt(output2?.dnca_tot_amt || '0', 10);
+        // 추정된 주문 가능금액 = 예수금액 × 100% (공격적 전략)
+        const estimatedOrderAmount = dncaTotAmt;
+        console.log(`💰 주문 가능금액: ${dncaTotAmt.toLocaleString()}원 (100% 공격적 전략)`);
 
-      // 추정된 주문 가능금액 = 예수금액 × 100% (공격적 전략)
-      const estimatedOrderAmount = dncaTotAmt;
-      console.log(`💰 주문 가능금액: ${dncaTotAmt.toLocaleString()}원 (100% 공격적 전략)`);
-
-      return {
-        account_id: this.accountId,
-        holdings,
-        dnca_tot_amt: dncaTotAmt,
-        evlu_amt_smtl: parseInt(output2?.scts_evlu_amt || '0', 10), // 유가증권 평가금액
-        evlu_pfls_amt_smtl: parseInt(output2?.evlu_pfls_smtl_amt || '0', 10), // 평가손익합계
-        tot_asst_amt: parseInt(output2?.tot_evlu_amt || '0', 10), // 총평가금액
-        estimated_order_amount: estimatedOrderAmount, // ✅ 추정된 주문 가능금액
-      };
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const msg = error?.response?.data?.msg1 || error?.message;
-      console.error(`❌ 주식잔고조회 실패: status=${status}, msg=${msg}`);
-      throw error;
-    }
+        return {
+          account_id: this.accountId,
+          holdings,
+          dnca_tot_amt: dncaTotAmt,
+          evlu_amt_smtl: parseInt(output2?.scts_evlu_amt || '0', 10), // 유가증권 평가금액
+          evlu_pfls_amt_smtl: parseInt(output2?.evlu_pfls_smtl_amt || '0', 10), // 평가손익합계
+          tot_asst_amt: parseInt(output2?.tot_evlu_amt || '0', 10), // 총평가금액
+          estimated_order_amount: estimatedOrderAmount, // ✅ 추정된 주문 가능금액
+        };
+      },
+      '주식잔고조회'
+    );
   }
 
   /**
@@ -421,67 +486,65 @@ export class KISApi {
    * 엔드포인트: /domestic-stock/v1/trading/inquire-holdings
    */
   async getHoldings(): Promise<HoldingData[]> {
-    try {
-      const headers = await this.getHeaders('TTTC8434R');
+    return this.retryWithTokenRefresh(
+      async (forceRefresh?: boolean) => {
+        const headers = await this.getHeaders('TTTC8434R', forceRefresh);
 
-      const cano = this.accountId.split('-')[0];
-      const acntPrdtCd = this.accountId.split('-')[1] || '01';
+        const cano = this.accountId.split('-')[0];
+        const acntPrdtCd = this.accountId.split('-')[1] || '01';
 
-      console.log(`📝 보유종목 조회: CANO=${cano}, ACNT=${acntPrdtCd}`);
+        console.log(`📝 보유종목 조회: CANO=${cano}, ACNT=${acntPrdtCd}`);
 
-      const response = await this.client.get(
-        '/domestic-stock/v1/trading/inquire-holdings',
-        {
-          headers,
-          params: {
-            CANO: cano,
-            ACNT_PRDT_CD: acntPrdtCd,
-            INQR_DVSN_1: '1',
-            INQR_DVSN_2: '0',
-            CTX_AREA_FK100: '',
-            CTX_AREA_NK100: '',
-          },
+        const response = await this.client.get(
+          '/domestic-stock/v1/trading/inquire-holdings',
+          {
+            headers,
+            params: {
+              CANO: cano,
+              ACNT_PRDT_CD: acntPrdtCd,
+              INQR_DVSN_1: '1',
+              INQR_DVSN_2: '0',
+              CTX_AREA_FK100: '',
+              CTX_AREA_NK100: '',
+            },
+          }
+        );
+
+        // HTML 리다이렉트 응답 확인 (권한 부족)
+        if (typeof response.data === 'string' && response.data.includes('refresh')) {
+          throw new Error('보유종목 조회 권한이 없습니다. KIS 개발자 포탈에서 권한을 활성화해주세요.');
         }
-      );
 
-      // HTML 리다이렉트 응답 확인 (권한 부족)
-      if (typeof response.data === 'string' && response.data.includes('refresh')) {
-        throw new Error('보유종목 조회 권한이 없습니다. KIS 개발자 포탈에서 권한을 활성화해주세요.');
-      }
+        // 응답 상태 확인
+        if (response.data.rt_cd !== '0') {
+          throw new Error(`보유종목 조회 실패: ${response.data.msg1}`);
+        }
 
-      // 응답 상태 확인
-      if (response.data.rt_cd !== '0') {
-        throw new Error(`보유종목 조회 실패: ${response.data.msg1}`);
-      }
+        const holdings: HoldingData[] = [];
+        const output = response.data.output || [];
 
-      const holdings: HoldingData[] = [];
-      const output = response.data.output || [];
+        for (const holding of output) {
+          holdings.push({
+            symbol: holding.pdno || '',
+            name: holding.prdt_name || '',
+            quantity: parseInt(holding.hldg_qty || '0', 10),
+            current_price: parseInt(holding.stck_prpr || '0', 10),
+            evaluating: parseInt(holding.evlu_amt || '0', 10),
+            profit_loss: parseInt(holding.evlu_pfls_amt || '0', 10),
+            profit_rate:
+              parseInt(holding.evlu_amt || '0', 10) > 0
+                ? (parseInt(holding.evlu_pfls_amt || '0', 10) /
+                    parseInt(holding.evlu_amt || '0', 10)) *
+                  100
+                : 0,
+          });
+        }
 
-      for (const holding of output) {
-        holdings.push({
-          symbol: holding.pdno || '',
-          name: holding.prdt_name || '',
-          quantity: parseInt(holding.hldg_qty || '0', 10),
-          current_price: parseInt(holding.stck_prpr || '0', 10),
-          evaluating: parseInt(holding.evlu_amt || '0', 10),
-          profit_loss: parseInt(holding.evlu_pfls_amt || '0', 10),
-          profit_rate:
-            parseInt(holding.evlu_amt || '0', 10) > 0
-              ? (parseInt(holding.evlu_pfls_amt || '0', 10) /
-                  parseInt(holding.evlu_amt || '0', 10)) *
-                100
-              : 0,
-        });
-      }
-
-      console.log(`✅ 보유종목 조회 성공: ${holdings.length}개`);
-      return holdings;
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const msg = error?.response?.data?.msg1 || error?.message;
-      console.error(`❌ 보유종목 조회 실패: status=${status}, msg=${msg}`);
-      throw error;
-    }
+        console.log(`✅ 보유종목 조회 성공: ${holdings.length}개`);
+        return holdings;
+      },
+      '보유종목 조회'
+    );
   }
 
   /**
