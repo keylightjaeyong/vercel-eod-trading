@@ -4,6 +4,7 @@ import { KneeShoulderPattern } from '@/lib/patterns/knee-shoulder';
 import { getExchangeCode, isTradingTime } from '@/lib/utils/exchange';
 import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
 import { getPostgresPool } from '@/lib/db/pool';
+import { telegramBot } from '@/lib/telegram/bot';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -343,6 +344,14 @@ export async function POST(req: NextRequest) {
               console.log(
                 `✅ [${name}] 매도 완료: ${actualSellQty}주 @ ${sellPrice}원 (수익: ${profitPct.toFixed(2)}%)`
               );
+
+              // 📢 Telegram 알림
+              try {
+                const profitAmount = Math.floor((sellPrice - entry_price) * actualSellQty);
+                await telegramBot.notifySell(name, actualSellQty, sellPrice, profitAmount, profitPct, sellReason);
+              } catch (err) {
+                console.warn(`⚠️ Telegram 알림 실패: ${err}`);
+              }
 
               // 거래 이력 저장
               try {

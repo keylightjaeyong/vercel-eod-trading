@@ -6,6 +6,7 @@ import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
 import { getPostgresPool } from '@/lib/db/pool';
 import { calculateADX, calculatePlusDI, calculateMinusDI } from '@/lib/indicators/adx';
 import { getMarketRegime, getRisePercent, getStopLossPct, getTrailingStopPct, getRegimeConfig } from '@/lib/patterns/market-regime';
+import { telegramBot } from '@/lib/telegram/bot';
 
 // ⏱️ Vercel 함수 실행 제한 설정 (최대 30초)
 // 10개 종목을 2~3초씩 순차 처리 가능 (30초 / 10개 = 3초/종목)
@@ -476,6 +477,13 @@ export async function POST(req: NextRequest) {
               console.log(
                 `✅ [${name}] 매수 완료: ${actualBuyQty}주 @ ${currentPrice}원`
               );
+
+              // 📢 Telegram 알림
+              try {
+                await telegramBot.notifyBuy(name, actualBuyQty, currentPrice, 0);
+              } catch (err) {
+                console.warn(`⚠️ Telegram 알림 실패: ${err}`);
+              }
 
               // 거래 이력 저장 (ADX 정보 포함)
               try {
