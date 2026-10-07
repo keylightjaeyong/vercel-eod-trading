@@ -1,0 +1,39 @@
+name: Collect Prices (Backup Cron)
+
+# 매 5분마다 실행 (Vercel 크론 백업)
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # 수동 실행 가능
+
+jobs:
+  collect-prices:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📊 가격 수집 (GitHub Actions)
+        run: |
+          echo "🚀 collect-prices 엔드포인트 호출 중..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://vercel-eod-trading.vercel.app/api/cron/collect-prices" \
+            -H "Content-Type: application/json")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ 수집 성공"
+            exit 0
+          else
+            echo "❌ 수집 실패 (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+      - name: 📧 실패 알림 (선택사항)
+        if: failure()
+        run: |
+          echo "⚠️ collect-prices 실패"
+          echo "시간: $(date -u)"

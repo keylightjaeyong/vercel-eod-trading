@@ -1,0 +1,39 @@
+name: Trade Execution (Backup Cron)
+
+# 매 2분마다 실행 (Vercel 크론 백업)
+on:
+  schedule:
+    - cron: '*/2 * * * *'
+  workflow_dispatch:
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🎯 매수/매도 신호 체크
+        run: |
+          echo "🚀 trade 엔드포인트 호출 중..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://vercel-eod-trading.vercel.app/api/cron/trade" \
+            -H "Content-Type: application/json")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ 체크 완료"
+            exit 0
+          else
+            echo "❌ 체크 실패 (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+      - name: 📧 실패 알림
+        if: failure()
+        run: |
+          echo "⚠️ trade 실패"
+          echo "시간: $(date -u)"
