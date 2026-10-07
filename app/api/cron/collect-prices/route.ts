@@ -106,10 +106,11 @@ export async function POST(req: NextRequest) {
 
         // KIS API에서 현재가 조회 (재시도 로직 포함)
         // NX 사용 (정상 작동)
+        console.log(`🔄 [${name}] KIS API 호출 시작...`);
         const priceData = await kis.retryGetPrice(code, 'NX');
         const currentPrice = priceData.current;
 
-        console.log(`📈 [${name}] 현재가: ${currentPrice.toLocaleString()}원`);
+        console.log(`✅ [${name}] 현재가: ${currentPrice.toLocaleString()}원`);
 
         // price_snapshots에 저장 (현재 close 가격만 필수)
         const insertResult = await pool.query(
