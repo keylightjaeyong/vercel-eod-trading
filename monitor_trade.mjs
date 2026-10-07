@@ -15,17 +15,22 @@ async function monitor() {
     
     // 1. 최근 가격 (최근 5개)
     const prices = await pool.query(`
-      SELECT close, created_at AT TIME ZONE 'Asia/Seoul' as kst_time
+      SELECT close, created_at
       FROM price_snapshots
       WHERE code = '005930'
       ORDER BY created_at DESC
       LIMIT 5
     `);
-    
+
     if (prices.rows.length > 0) {
       console.log('📊 최근 가격 데이터:');
       prices.rows.forEach((r, i) => {
-        const time = new Date(r.kst_time).toISOString().split('T')[1].split('.')[0];
+        // UTC → KST 변환 (+ 9시간)
+        const kstTime = new Date(new Date(r.created_at).getTime() + 9*60*60*1000);
+        const h = kstTime.getUTCHours().toString().padStart(2, '0');
+        const m = kstTime.getUTCMinutes().toString().padStart(2, '0');
+        const s = kstTime.getUTCSeconds().toString().padStart(2, '0');
+        const time = `${h}:${m}:${s}`;
         console.log(`   ${i+1}. ${parseInt(r.close).toLocaleString()}원 (${time})`);
       });
     } else {
@@ -71,19 +76,24 @@ async function monitor() {
     
     // 3. 거래 기록 (최근 3개)
     const trades = await pool.query(`
-      SELECT 
+      SELECT
         action, quantity, price,
-        created_at AT TIME ZONE 'Asia/Seoul' as kst_time
+        created_at
       FROM trade_history
       WHERE code = '005930'
       ORDER BY created_at DESC
       LIMIT 3
     `);
-    
+
     if (trades.rows.length > 0) {
       console.log(`\n💰 최근 거래:`);
       trades.rows.forEach((t, i) => {
-        const time = new Date(t.kst_time).toISOString().split('T')[1].split('.')[0];
+        // UTC → KST 변환 (+ 9시간)
+        const kstTime = new Date(new Date(t.created_at).getTime() + 9*60*60*1000);
+        const h = kstTime.getUTCHours().toString().padStart(2, '0');
+        const m = kstTime.getUTCMinutes().toString().padStart(2, '0');
+        const s = kstTime.getUTCSeconds().toString().padStart(2, '0');
+        const time = `${h}:${m}:${s}`;
         console.log(`   ${i+1}. [${t.action}] ${t.quantity}주 @ ${t.price}원 (${time})`);
       });
     }
