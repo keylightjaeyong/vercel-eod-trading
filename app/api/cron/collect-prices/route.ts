@@ -14,9 +14,25 @@ export const maxDuration = 30;
  */
 export async function POST(req: NextRequest) {
   const timeInfo = getKSTTimeInfo();
-  console.log(`📊 가격 수집 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}`);
 
-  // 거래 시간 확인 (08:00-20:00 KST)
+  // KST 현재 날짜 및 시간
+  const now = new Date();
+  const kstNow = new Date(now.getTime() + 9*60*60*1000);
+  const dayOfWeek = kstNow.getUTCDay(); // 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
+  const dayName = ['일', '월', '화', '수', '목', '금', '토'][dayOfWeek];
+
+  console.log(`📊 가격 수집 시작 (5분 주기) - KST ${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')} (${dayName}요일)`);
+
+  // 1️⃣ 토요일/일요일 제외
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    console.log(`⏸️ 주말 (${dayName}요일) - 데이터 수집 스킵`);
+    return NextResponse.json({
+      success: true,
+      message: `주말(${dayName}요일) - 수집 스킵`,
+    });
+  }
+
+  // 2️⃣ 거래 시간 확인 (08:00-20:00 KST)
   if (timeInfo.hour < 8 || timeInfo.hour >= 20) {
     console.log(`⏸️ 거래 시간 외 (${timeInfo.hour}:${String(timeInfo.minute).padStart(2, '0')}) - 데이터 수집 스킵`);
     return NextResponse.json({
