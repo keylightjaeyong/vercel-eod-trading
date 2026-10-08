@@ -64,17 +64,18 @@ export function getStopLossPct(regime: MarketRegime): number {
 /**
  * 시장 체제별 동적 추적 손절 기준(%)
  * 최고점 대비 얼마나 하락하면 손절매할지
+ * (하루 4~5% 변동 기준으로 설정)
  */
 export function getTrailingStopPct(regime: MarketRegime): number {
   switch (regime) {
     case 'UPTREND':
-      return -0.3;   // 상승장: -0.3% (덜 민감)
+      return -0.5;   // 상승장: -0.5% (여유 있게)
     case 'DOWNTREND':
-      return -0.15;  // 하락장: -0.15% (더 민감, 빠른 이익)
+      return -0.3;   // 하락장: -0.3% (빠른 이익)
     case 'SIDEWAYS':
-      return -0.2;   // 횡보장: -0.2% (중간)
+      return -0.5;   // 횡보장: -0.5% (중간)
     default:
-      return -0.3;
+      return -0.5;
   }
 }
 
