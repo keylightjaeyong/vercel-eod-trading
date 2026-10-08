@@ -37,9 +37,9 @@ async function monitor() {
       console.log('❌ 가격 데이터 없음');
     }
     
-    // 2. 72개 통계
+    // 2. 144개 통계 (6시간 범위)
     const stats = await pool.query(`
-      SELECT 
+      SELECT
         MIN(CAST(close as INTEGER)) as min_price,
         MAX(CAST(close as INTEGER)) as max_price,
         COUNT(*) as count,
@@ -48,7 +48,7 @@ async function monitor() {
         SELECT close FROM price_snapshots
         WHERE code = '005930'
         ORDER BY created_at DESC
-        LIMIT 72
+        LIMIT 144
       ) t
     `);
     
@@ -59,7 +59,7 @@ async function monitor() {
       const diff = s.latest - buyPrice;
       const diffPct = (diff / buyPrice * 100).toFixed(2);
       
-      console.log(`\n📈 72개 데이터 분석:`);
+      console.log(`\n📈 144개 데이터 분석 (6시간 범위):`);
       console.log(`   최저: ${s.min_price.toLocaleString()}원`);
       console.log(`   최고: ${s.max_price.toLocaleString()}원`);
       console.log(`   현재: ${s.latest.toLocaleString()}원`);
