@@ -54,23 +54,37 @@ async function monitor() {
     
     if (stats.rows.length > 0 && stats.rows[0].count > 0) {
       const s = stats.rows[0];
-      const rise = ((s.max_price - s.min_price) / s.min_price * 100).toFixed(2);
-      const buyPrice = Math.floor(s.min_price * 1.01);
-      const diff = s.latest - buyPrice;
-      const diffPct = (diff / buyPrice * 100).toFixed(2);
-      
-      console.log(`\n📈 144개 데이터 분석 (6시간 범위):`);
-      console.log(`   최저: ${s.min_price.toLocaleString()}원`);
-      console.log(`   최고: ${s.max_price.toLocaleString()}원`);
-      console.log(`   현재: ${s.latest.toLocaleString()}원`);
-      console.log(`   상승률: ${rise}%`);
-      
-      console.log(`\n🎯 매수 신호 (저점 기준 1% 상승):`);
-      console.log(`   기준가: ${buyPrice.toLocaleString()}원`);
-      if (diff >= 0) {
-        console.log(`   ✅ 매수 신호! (+${diff.toLocaleString()}원, +${diffPct}%)`);
+
+      // ⚠️ 안전성 체크
+      if (s.count !== 144) {
+        console.warn(`⚠️ 데이터 부족 경고: ${s.count}개만 있음 (144개 필요) - 범위: ~${(s.count * 2.5 / 60).toFixed(1)}시간`);
+      }
+
+      if (s.min_price <= 0) {
+        console.error(`❌ 오류: 최저가가 0원 이하 (${s.min_price}원) - 계산 중단`);
+      } else if (s.latest <= 0) {
+        console.error(`❌ 오류: 현재가가 0원 이하 (${s.latest}원) - 계산 중단`);
       } else {
-        console.log(`   ❌ 대기 중 (${diff.toLocaleString()}원 부족, ${diffPct}%)`);
+        // ✅ 안전한 계산만 진행
+        const rise = ((s.max_price - s.min_price) / s.min_price * 100).toFixed(2);
+        const buyPrice = Math.floor(s.min_price * 1.01);
+        const diff = s.latest - buyPrice;
+        const diffPct = (diff / buyPrice * 100).toFixed(2);
+
+        console.log(`\n📈 144개 데이터 분석 (6시간 범위):`);
+        console.log(`   데이터: ${s.count}개 ${s.count === 144 ? '✅' : '⚠️'}`);
+        console.log(`   최저: ${s.min_price.toLocaleString()}원`);
+        console.log(`   최고: ${s.max_price.toLocaleString()}원`);
+        console.log(`   현재: ${s.latest.toLocaleString()}원`);
+        console.log(`   상승률: ${rise}%`);
+
+        console.log(`\n🎯 매수 신호 (저점 기준 1% 상승):`);
+        console.log(`   기준가: ${buyPrice.toLocaleString()}원`);
+        if (diff >= 0) {
+          console.log(`   ✅ 매수 신호! (+${diff.toLocaleString()}원, +${diffPct}%)`);
+        } else {
+          console.log(`   ❌ 대기 중 (${diff.toLocaleString()}원 부족, ${diffPct}%)`);
+        }
       }
     }
     

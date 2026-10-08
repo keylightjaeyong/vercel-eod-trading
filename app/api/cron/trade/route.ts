@@ -350,38 +350,45 @@ export async function POST(req: NextRequest) {
             `SELECT close FROM price_snapshots
              WHERE code = $1
              ORDER BY timestamp DESC
-             LIMIT 72`,
+             LIMIT 144`,
             [code]
           );
 
-          if (priceHistoryResult.rows.length >= 72) {
-            // 72개 이상 있으면 정렬 후 ADX 계산
+          if (priceHistoryResult.rows.length === 144) {
+            // 144개 모두 있으면 정렬 후 ADX 계산
             prices = priceHistoryResult.rows
               .reverse()
               .map(r => parseFloat(r.close));
 
-            // ADX, ±DI 계산 (최근 14개 기반)
-            const ADX = calculateADX(prices.slice(-14));
-            const plusDI = calculatePlusDI(prices.slice(-14));
-            const minusDI = calculateMinusDI(prices.slice(-14));
+            // ⚠️ 0원 또는 음수 체크
+            const invalidPrices = prices.filter(p => p <= 0);
+            if (invalidPrices.length > 0) {
+              console.error(`❌ [${name}] 이상한 가격 값 감지: 0원 이하 ${invalidPrices.length}개`);
+              prices = [];
+            } else {
+              // ADX, ±DI 계산 (최근 14개 기반)
+              const ADX = calculateADX(prices.slice(-14));
+              const plusDI = calculatePlusDI(prices.slice(-14));
+              const minusDI = calculateMinusDI(prices.slice(-14));
 
-            // 시장 체제 판단
-            marketRegime = getMarketRegime(ADX, plusDI, minusDI);
-            risePercent = getRisePercent(marketRegime);
-            stopLossPct = getStopLossPct(marketRegime);
-            trailingStopPct = getTrailingStopPct(marketRegime);
+              // 시장 체제 판단
+              marketRegime = getMarketRegime(ADX, plusDI, minusDI);
+              risePercent = getRisePercent(marketRegime);
+              stopLossPct = getStopLossPct(marketRegime);
+              trailingStopPct = getTrailingStopPct(marketRegime);
 
-            console.log(`📊 [${name}] ADX=${ADX.toFixed(2)}, +DI=${plusDI.toFixed(2)}, -DI=${minusDI.toFixed(2)}`);
-            console.log(`🔍 시장 체제: ${marketRegime}, 반등: ${risePercent}%, 손절: ${stopLossPct}%, 추적: ${trailingStopPct}%`);
+              console.log(`📊 [${name}] ADX=${ADX.toFixed(2)}, +DI=${plusDI.toFixed(2)}, -DI=${minusDI.toFixed(2)}`);
+              console.log(`🔍 시장 체제: ${marketRegime}, 반등: ${risePercent}%, 손절: ${stopLossPct}%, 추적: ${trailingStopPct}%`);
+            }
           } else if (priceHistoryResult.rows.length > 0) {
-            // 72개 미만이면 사용 가능한 데이터로만 계산
+            // 144개 미만이면 경고 후 사용 가능한 데이터로만 계산
             prices = priceHistoryResult.rows
               .reverse()
               .map(r => parseFloat(r.close));
 
-            console.log(`⚠️ [${name}] 데이터 부족 (${priceHistoryResult.rows.length}/72개) - 횡보장으로 가정`);
+            console.warn(`⚠️ [${name}] 데이터 부족 (${priceHistoryResult.rows.length}/144개) - 범위: ~${(priceHistoryResult.rows.length * 2.5 / 60).toFixed(1)}시간`);
           } else {
-            console.log(`⚠️ [${name}] 가격 데이터 없음`);
+            console.log(`❌ [${name}] 가격 데이터 없음`);
             prices = [];
           }
         } catch (err) {
@@ -412,8 +419,20 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // 72개 저점 계산
+        // 144개 저점 계산 (안전성 체크)
+        if (prices.length === 0) {
+          console.error(`❌ [${name}] 유효한 가격 데이터 없음, 매수 스킵`);
+          continue;
+        }
+
         const lowestPrice = Math.min(...prices);
+
+        // ⚠️ 저점이 0원 이하인 경우
+        if (lowestPrice <= 0) {
+          console.error(`❌ [${name}] 저점 계산 오류 (${lowestPrice}원), 매수 스킵`);
+          continue;
+        }
+
         const buyPrice = lowestPrice * (1 + risePercent / 100);
 
         // 매수 신호 판단
