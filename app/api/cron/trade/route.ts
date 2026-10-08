@@ -39,7 +39,7 @@ async function compare72DBvsKIS(
 
     const dbPrices = dbResult.rows
       .reverse()
-      .map(r => parseFloat(r.close));
+      .map((r: any) => parseFloat(r.close));
     console.log(`✅ [${name}] DB 72개 조회 완료`);
 
     // Step 2: KIS API에서 72개 조회
@@ -146,7 +146,7 @@ async function ensure72ValidPrices(pool: any, code: string): Promise<number[]> {
       // 정렬해서 반환 (오래된 것부터)
       return recentResult.rows
         .reverse()
-        .map(r => parseFloat(r.close));
+        .map((r: any) => parseFloat(r.close));
     }
 
     if (recentResult.rows.length > 0) {
@@ -170,12 +170,12 @@ async function ensure72ValidPrices(pool: any, code: string): Promise<number[]> {
       console.log(`✅ [${code}] 과거 데이터에서 유효한 72개 발견`);
       return backupResult.rows
         .reverse()
-        .map(r => parseFloat(r.close));
+        .map((r: any) => parseFloat(r.close));
     } else if (backupResult.rows.length > 0) {
       console.warn(`⚠️ [${code}] 과거 데이터 부족: ${backupResult.rows.length}개만 발견`);
       return backupResult.rows
         .reverse()
-        .map(r => parseFloat(r.close));
+        .map((r: any) => parseFloat(r.close));
     }
 
     console.error(`❌ [${code}] 유효한 가격 데이터 없음`);
