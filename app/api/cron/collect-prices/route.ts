@@ -5,7 +5,7 @@ import { nowInSeoul, getKSTTimeInfo } from '@/lib/utils/timezone';
 import { getPostgresPool } from '@/lib/db/pool';
 
 export const runtime = 'nodejs';
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 /**
  * POST /api/cron/collect-prices
