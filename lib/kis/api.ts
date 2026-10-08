@@ -614,6 +614,56 @@ export class KISApi {
   }
 
   /**
+   * 5분봉 과거 데이터 조회 (데이터 복구용)
+   * 최근 30일 5분 단위 데이터 조회
+   * 크론 실패 시 데이터 갭 채우기 용도
+   */
+  async getMinutePriceHistory(code: string, days: number = 5): Promise<PriceData[]> {
+    try {
+      const headers = await this.getHeaders('FHKST10010100');
+
+      console.log(`📊 [${code}] 5분봉 데이터 조회 (최근 ${days}일)`);
+
+      const response = await this.client.get(
+        '/uapi/domestic-stock/v1/quotations/inquire-inquire-minute',
+        {
+          headers,
+          params: {
+            FID_COND_MRKT_DIV_CODE: 'NX', // 나스닥
+            FID_INPUT_ISCD: code,
+            FID_PERIOD_DIV_CODE: '5', // 5분봉 (Vercel Pro 신뢰도 높음)
+            FID_START_DT: '', // 최근 데이터
+            FID_END_DT: '',
+            FID_OMS_DATA: '0',
+          },
+        }
+      );
+
+      if (response.data.rt_cd !== '0') {
+        console.warn(`⚠️ 5분봉 조회 실패: ${response.data.msg1}`);
+        return [];
+      }
+
+      const output = response.data.output || [];
+      const prices = output.map((item: any) => ({
+        code,
+        name: item.hts_kor_isnm || '',
+        current: parseInt(item.stck_prpr || '0', 10),
+        bid: parseInt(item.bidp1 || '0', 10),
+        ask: parseInt(item.askp1 || '0', 10),
+        bid_qty: parseInt(item.bidp_rsqn1 || '0', 10),
+        ask_qty: parseInt(item.askp_rsqn1 || '0', 10),
+      }));
+
+      console.log(`✅ ${prices.length}개 5분봉 데이터 조회 완료`);
+      return prices;
+    } catch (error: any) {
+      console.error(`❌ 5분봉 조회 실패: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
    * 매도가능수량조회 (공식 권장)
    * API: 국내주식-165 / 매도가능수량조회
    * 실전 TR_ID: TTTC8408R

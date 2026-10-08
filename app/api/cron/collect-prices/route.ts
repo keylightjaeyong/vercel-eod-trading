@@ -112,6 +112,26 @@ export async function POST(req: NextRequest) {
 
         console.log(`✅ [${name}] 현재가: ${currentPrice.toLocaleString()}원`);
 
+        // 중복 방지: 최근 3분 내 같은 가격 확인
+        const recentPrice = await pool.query(
+          `SELECT close FROM price_snapshots
+           WHERE code = $1 AND created_at > NOW() - INTERVAL '3 minutes'
+           ORDER BY created_at DESC LIMIT 1`,
+          [code]
+        );
+
+        if (recentPrice.rows.length > 0 && recentPrice.rows[0].close == currentPrice) {
+          console.log(`⏭️ [${name}] 같은 가격 (중복 방지, 저장 스킵): ${currentPrice}원`);
+          successCount++;
+          results.push({
+            code,
+            name,
+            price: currentPrice,
+            status: '⏭️ 중복 방지 (저장 안 함)',
+          });
+          continue;
+        }
+
         // price_snapshots에 저장 (현재 close 가격만 필수)
         const insertResult = await pool.query(
           `INSERT INTO price_snapshots

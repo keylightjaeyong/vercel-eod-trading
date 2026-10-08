@@ -8,6 +8,184 @@ import { calculateADX, calculatePlusDI, calculateMinusDI } from '@/lib/indicator
 import { getMarketRegime, getRisePercent, getStopLossPct, getTrailingStopPct, getRegimeConfig } from '@/lib/patterns/market-regime';
 import { telegramBot } from '@/lib/telegram/bot';
 
+/**
+ * A 방식: DB 72개 vs KIS API 72개 비교 검증
+ * - DB 72개 조회 (5분 간격 과거 데이터)
+ * - KIS API 72개 조회 (5분 봉)
+ * - 비교 검증 (개수, 가격 범위)
+ * - 검증 통과: DB 사용 / 실패: KIS 대체
+ */
+async function compare72DBvsKIS(
+  pool: any,
+  kis: KISApi,
+  code: string,
+  name: string
+): Promise<{ prices: number[]; source: 'db' | 'kis'; validated: boolean }> {
+  try {
+    // Step 1: DB에서 72개 조회
+    console.log(`📊 [${name}] Step 1: DB에서 72개 조회 중...`);
+    const dbResult = await pool.query(
+      `SELECT close FROM price_snapshots
+       WHERE code = $1 AND CAST(close as INTEGER) > 0
+       ORDER BY created_at DESC
+       LIMIT 72`,
+      [code]
+    );
+
+    if (dbResult.rows.length < 72) {
+      console.warn(`⚠️ [${name}] DB 데이터 부족 (${dbResult.rows.length}/72개)`);
+      return { prices: [], source: 'kis', validated: false };
+    }
+
+    const dbPrices = dbResult.rows
+      .reverse()
+      .map(r => parseFloat(r.close));
+    console.log(`✅ [${name}] DB 72개 조회 완료`);
+
+    // Step 2: KIS API에서 72개 조회
+    console.log(`🔗 [${name}] Step 2: KIS API에서 72개 조회 중...`);
+    try {
+      const kisPriceData = await kis.getMinutePriceHistory(code, 5);
+
+      if (kisPriceData.length < 72) {
+        console.warn(`⚠️ [${name}] KIS API 데이터 부족 (${kisPriceData.length}/72개), DB 데이터만 사용`);
+        return { prices: dbPrices, source: 'db', validated: false };
+      }
+
+      const kisPrices = kisPriceData
+        .slice(-72)
+        .map(p => p.current);
+      console.log(`✅ [${name}] KIS API 72개 조회 완료`);
+
+      // Step 3: A 방식 비교 검증
+      console.log(`🔍 [${name}] Step 3: A 방식 비교 검증 중...`);
+      const validation = validateCompare72(dbPrices, kisPrices, name);
+
+      if (validation.valid) {
+        console.log(`✅ [${name}] 검증 통과: DB 데이터 사용 (${validation.reason})`);
+        return { prices: dbPrices, source: 'db', validated: true };
+      } else {
+        console.warn(`⚠️ [${name}] 검증 실패: ${validation.reason}, KIS API로 대체`);
+        return { prices: kisPrices, source: 'kis', validated: false };
+      }
+    } catch (err) {
+      console.warn(`⚠️ [${name}] KIS API 조회 실패: ${err}, DB 데이터 사용`);
+      return { prices: dbPrices, source: 'db', validated: false };
+    }
+  } catch (err) {
+    console.error(`❌ [${name}] A 방식 비교 오류: ${err}`);
+    return { prices: [], source: 'kis', validated: false };
+  }
+}
+
+/**
+ * 72개 데이터 비교 검증
+ * - 개수: DB 72 = KIS 72
+ * - 가격 범위: min/max 5% 이내
+ */
+function validateCompare72(
+  dbPrices: number[],
+  kisPrices: number[],
+  code: string
+): { valid: boolean; reason: string } {
+  // 개수 확인
+  if (dbPrices.length !== 72 || kisPrices.length !== 72) {
+    return {
+      valid: false,
+      reason: `개수 불일치: DB ${dbPrices.length}개 vs KIS ${kisPrices.length}개`,
+    };
+  }
+
+  // 가격 범위 확인
+  const dbMin = Math.min(...dbPrices);
+  const dbMax = Math.max(...dbPrices);
+  const kisMin = Math.min(...kisPrices);
+  const kisMax = Math.max(...kisPrices);
+
+  const minDiff = Math.abs(dbMin - kisMin) / dbMin;
+  const maxDiff = Math.abs(dbMax - kisMax) / dbMax;
+
+  // 5% 이내 차이만 허용
+  if (minDiff > 0.05 || maxDiff > 0.05) {
+    return {
+      valid: false,
+      reason: `가격 범위 불일치: min차이 ${(minDiff * 100).toFixed(2)}%, max차이 ${(maxDiff * 100).toFixed(2)}%`,
+    };
+  }
+
+  // 모든 가격이 유효한지 확인
+  if (dbPrices.some(p => p <= 0) || kisPrices.some(p => p <= 0)) {
+    return {
+      valid: false,
+      reason: '0원 이하의 가격 포함',
+    };
+  }
+
+  return {
+    valid: true,
+    reason: `개수 일치 (72개), 가격 범위 일치 (min ${(minDiff * 100).toFixed(2)}%, max ${(maxDiff * 100).toFixed(2)}%)`,
+  };
+}
+
+/**
+ * 과거 데이터에서 유효한 72개 가격 찾기
+ * 현재 데이터가 부족하거나 0원이 있으면 이전 데이터를 자동으로 검색
+ */
+async function ensure72ValidPrices(pool: any, code: string): Promise<number[]> {
+  try {
+    // 1단계: 최근 데이터에서 0원 필터링해서 72개 찾기 (5분 간격 × 72 = 6시간)
+    const recentResult = await pool.query(
+      `SELECT close FROM price_snapshots
+       WHERE code = $1 AND CAST(close as INTEGER) > 0
+       ORDER BY created_at DESC
+       LIMIT 72`,
+      [code]
+    );
+
+    if (recentResult.rows.length === 72) {
+      // 정렬해서 반환 (오래된 것부터)
+      return recentResult.rows
+        .reverse()
+        .map(r => parseFloat(r.close));
+    }
+
+    if (recentResult.rows.length > 0) {
+      console.log(`⚠️ [${code}] 최근 유효 데이터: ${recentResult.rows.length}개만 발견, 이전 데이터 검색 중...`);
+    }
+
+    // 2단계: 없으면 과거 데이터 검색
+    // 대략 3일 앞으로 검색 (충분한 마진)
+    const searchBackDays = 3;
+    const backupResult = await pool.query(
+      `SELECT close FROM price_snapshots
+       WHERE code = $1
+       AND CAST(close as INTEGER) > 0
+       AND created_at >= NOW() - INTERVAL '${searchBackDays} days'
+       ORDER BY created_at DESC
+       LIMIT 72`,
+      [code]
+    );
+
+    if (backupResult.rows.length >= 72) {
+      console.log(`✅ [${code}] 과거 데이터에서 유효한 72개 발견`);
+      return backupResult.rows
+        .reverse()
+        .map(r => parseFloat(r.close));
+    } else if (backupResult.rows.length > 0) {
+      console.warn(`⚠️ [${code}] 과거 데이터 부족: ${backupResult.rows.length}개만 발견`);
+      return backupResult.rows
+        .reverse()
+        .map(r => parseFloat(r.close));
+    }
+
+    console.error(`❌ [${code}] 유효한 가격 데이터 없음`);
+    return [];
+  } catch (err) {
+    console.error(`❌ [${code}] 72개 데이터 검색 오류: ${err}`);
+    return [];
+  }
+}
+
 // ⏱️ Vercel 함수 실행 제한 설정 (최대 30초)
 // 10개 종목을 2~3초씩 순차 처리 가능 (30초 / 10개 = 3초/종목)
 export const maxDuration = 30;
@@ -338,7 +516,7 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // 📊 최근 72개 5분봉 조회 (6시간 거래 데이터)
+        // 📊 유효한 144개 가격 확보 (2.5분 간격 × 144 = 6시간)
         let prices: number[] = [];
         let marketRegime: any = 'SIDEWAYS';
         let risePercent: number = 0.8;
@@ -346,53 +524,47 @@ export async function POST(req: NextRequest) {
         let trailingStopPct: number = -0.2;
 
         try {
-          const priceHistoryResult = await pool.query(
-            `SELECT close FROM price_snapshots
-             WHERE code = $1
-             ORDER BY timestamp DESC
-             LIMIT 144`,
-            [code]
-          );
+          // 1단계: A 방식 - DB 72 vs KIS 72 비교 검증
+          const priceResult = await compare72DBvsKIS(pool, kis, code, name);
+          prices = priceResult.prices;
 
-          if (priceHistoryResult.rows.length === 144) {
-            // 144개 모두 있으면 정렬 후 ADX 계산
-            prices = priceHistoryResult.rows
-              .reverse()
-              .map(r => parseFloat(r.close));
+          if (prices.length === 72) {
+            const source = priceResult.source === 'db' ? '(DB 검증됨)' : '(KIS 대체)';
+            console.log(`✅ [${name}] 72개 유효 가격 확보 ${source} (6시간 데이터)`);
 
-            // ⚠️ 0원 또는 음수 체크
-            const invalidPrices = prices.filter(p => p <= 0);
-            if (invalidPrices.length > 0) {
-              console.error(`❌ [${name}] 이상한 가격 값 감지: 0원 이하 ${invalidPrices.length}개`);
-              prices = [];
-            } else {
-              // ADX, ±DI 계산 (최근 14개 기반)
+            // ADX, ±DI 계산 (최근 14개 기반)
+            const ADX = calculateADX(prices.slice(-14));
+            const plusDI = calculatePlusDI(prices.slice(-14));
+            const minusDI = calculateMinusDI(prices.slice(-14));
+
+            // 시장 체제 판단
+            marketRegime = getMarketRegime(ADX, plusDI, minusDI);
+            risePercent = getRisePercent(marketRegime);
+            stopLossPct = getStopLossPct(marketRegime);
+            trailingStopPct = getTrailingStopPct(marketRegime);
+
+            console.log(`📊 [${name}] ADX=${ADX.toFixed(2)}, +DI=${plusDI.toFixed(2)}, -DI=${minusDI.toFixed(2)}`);
+            console.log(`🔍 시장 체제: ${marketRegime}, 반등: ${risePercent}%, 손절: ${stopLossPct}%, 추적: ${trailingStopPct}%`);
+          } else if (prices.length > 0) {
+            // 144개 미만이면 경고 후 사용 가능한 데이터로만 계산
+            console.warn(`⚠️ [${name}] 데이터 부족 (${prices.length}/144개) - 범위: ~${(prices.length * 5 / 60).toFixed(1)}시간 - 계속 진행`);
+
+            if (prices.length >= 14) {
+              // 최소 14개 이상이면 ADX 계산 가능
               const ADX = calculateADX(prices.slice(-14));
               const plusDI = calculatePlusDI(prices.slice(-14));
               const minusDI = calculateMinusDI(prices.slice(-14));
 
-              // 시장 체제 판단
               marketRegime = getMarketRegime(ADX, plusDI, minusDI);
               risePercent = getRisePercent(marketRegime);
               stopLossPct = getStopLossPct(marketRegime);
               trailingStopPct = getTrailingStopPct(marketRegime);
-
-              console.log(`📊 [${name}] ADX=${ADX.toFixed(2)}, +DI=${plusDI.toFixed(2)}, -DI=${minusDI.toFixed(2)}`);
-              console.log(`🔍 시장 체제: ${marketRegime}, 반등: ${risePercent}%, 손절: ${stopLossPct}%, 추적: ${trailingStopPct}%`);
             }
-          } else if (priceHistoryResult.rows.length > 0) {
-            // 144개 미만이면 경고 후 사용 가능한 데이터로만 계산
-            prices = priceHistoryResult.rows
-              .reverse()
-              .map(r => parseFloat(r.close));
-
-            console.warn(`⚠️ [${name}] 데이터 부족 (${priceHistoryResult.rows.length}/144개) - 범위: ~${(priceHistoryResult.rows.length * 2.5 / 60).toFixed(1)}시간`);
           } else {
-            console.log(`❌ [${name}] 가격 데이터 없음`);
-            prices = [];
+            console.error(`❌ [${name}] 유효한 가격 데이터 없음 - 매수 스킵`);
           }
         } catch (err) {
-          console.log(`⚠️ [${name}] 가격 이력 조회 실패: ${err}`);
+          console.error(`⚠️ [${name}] 144개 가격 조회 실패: ${err}`);
           prices = [];
         }
 

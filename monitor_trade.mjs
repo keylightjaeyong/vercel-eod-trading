@@ -37,7 +37,7 @@ async function monitor() {
       console.log('❌ 가격 데이터 없음');
     }
     
-    // 2. 144개 통계 (6시간 범위)
+    // 2. 72개 통계 (6시간 범위, 5분 간격)
     const stats = await pool.query(`
       SELECT
         MIN(CAST(close as INTEGER)) as min_price,
@@ -48,16 +48,16 @@ async function monitor() {
         SELECT close FROM price_snapshots
         WHERE code = '005930' AND CAST(close as INTEGER) > 0
         ORDER BY created_at DESC
-        LIMIT 144
+        LIMIT 72
       ) t
     `);
-    
+
     if (stats.rows.length > 0 && stats.rows[0].count > 0) {
       const s = stats.rows[0];
 
       // ⚠️ 데이터 검증 (0원은 쿼리에서 자동 제외)
-      if (s.count !== 144) {
-        console.warn(`⚠️ 데이터 부족 경고: ${s.count}개만 있음 (144개 필요) - 범위: ~${(s.count * 2.5 / 60).toFixed(1)}시간`);
+      if (s.count !== 72) {
+        console.warn(`⚠️ 데이터 부족 경고: ${s.count}개만 있음 (72개 필요) - 범위: ~${(s.count * 5 / 60).toFixed(1)}시간`);
       }
 
       if (s.latest <= 0) {
@@ -69,8 +69,8 @@ async function monitor() {
         const diff = s.latest - buyPrice;
         const diffPct = (diff / buyPrice * 100).toFixed(2);
 
-        console.log(`\n📈 144개 데이터 분석 (6시간 범위):`);
-        console.log(`   데이터: ${s.count}개 ${s.count === 144 ? '✅' : '⚠️'}`);
+        console.log(`\n📈 72개 데이터 분석 (6시간 범위):`);
+        console.log(`   데이터: ${s.count}개 ${s.count === 72 ? '✅' : '⚠️'}`);
         console.log(`   최저: ${s.min_price.toLocaleString()}원`);
         console.log(`   최고: ${s.max_price.toLocaleString()}원`);
         console.log(`   현재: ${s.latest.toLocaleString()}원`);

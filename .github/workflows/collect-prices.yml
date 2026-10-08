@@ -1,19 +1,39 @@
-name: Collect Prices (Backup Cron)
+name: Cron Failover (Backup for Vercel)
 
-# Vercel보다 2분30초 뒤에 실행 (Vercel 크론 백업)
+# Vercel Cron 백업: 5분 + 2초 후에 실행
+# Vercel이 정상이면 중복 방지, Vercel 실패하면 백업 역할
 on:
   schedule:
     - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
-  workflow_dispatch:  # 수동 실행 가능
+  workflow_dispatch:
 
 jobs:
-  collect-prices:
+  failover:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📊 가격 수집 (GitHub Actions)
+      - name: ✅ Vercel 실행 여부 확인
+        id: check
         run: |
-          echo "🚀 collect-prices 엔드포인트 호출 중..."
+          echo "🔍 최근 5분 내 Vercel 실행 여부 확인 중..."
+
+          # 최근 5분 내 가격 데이터 확인
+          RESPONSE=$(curl -s "https://vercel-eod-trading.vercel.app/api/health/collect-prices" 2>/dev/null || echo '{"status":"unknown"}')
+          STATUS=$(echo "$RESPONSE" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+
+          echo "Vercel Status: $STATUS"
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+          if [ "$STATUS" = "ok" ]; then
+            echo "✅ Vercel이 최근 5분 내 정상 실행"
+          else
+            echo "⚠️ Vercel 미실행 감지, GitHub에서 백업 실행"
+          fi
+
+      - name: 📊 백업 가격 수집 (Vercel 미실행 시만)
+        if: steps.check.outputs.status != 'ok'
+        run: |
+          echo "🚀 GitHub Actions에서 collect-prices 실행 중..."
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             "https://vercel-eod-trading.vercel.app/api/cron/collect-prices" \
             -H "Content-Type: application/json")
@@ -25,15 +45,14 @@ jobs:
           echo "Response: $BODY"
 
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ 수집 성공"
-            exit 0
+            echo "✅ 백업 수집 성공"
           else
-            echo "❌ 수집 실패 (HTTP $HTTP_CODE)"
+            echo "❌ 백업 수집 실패 (HTTP $HTTP_CODE)"
             exit 1
           fi
 
-      - name: 📧 실패 알림 (선택사항)
-        if: failure()
+      - name: ⏭️ Vercel 정상 (스킵)
+        if: steps.check.outputs.status == 'ok'
         run: |
-          echo "⚠️ collect-prices 실패"
-          echo "시간: $(date -u)"
+          echo "✅ Vercel이 정상 실행했으므로 GitHub에서는 스킵"
+          echo "⏱️ 다음 체크: 5분 후"
