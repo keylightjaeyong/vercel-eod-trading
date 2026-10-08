@@ -46,7 +46,7 @@ async function monitor() {
         (SELECT CAST(close as INTEGER) FROM price_snapshots WHERE code='005930' ORDER BY created_at DESC LIMIT 1) as latest
       FROM (
         SELECT close FROM price_snapshots
-        WHERE code = '005930'
+        WHERE code = '005930' AND CAST(close as INTEGER) > 0
         ORDER BY created_at DESC
         LIMIT 144
       ) t
@@ -55,17 +55,15 @@ async function monitor() {
     if (stats.rows.length > 0 && stats.rows[0].count > 0) {
       const s = stats.rows[0];
 
-      // ⚠️ 안전성 체크
+      // ⚠️ 데이터 검증 (0원은 쿼리에서 자동 제외)
       if (s.count !== 144) {
         console.warn(`⚠️ 데이터 부족 경고: ${s.count}개만 있음 (144개 필요) - 범위: ~${(s.count * 2.5 / 60).toFixed(1)}시간`);
       }
 
-      if (s.min_price <= 0) {
-        console.error(`❌ 오류: 최저가가 0원 이하 (${s.min_price}원) - 계산 중단`);
-      } else if (s.latest <= 0) {
-        console.error(`❌ 오류: 현재가가 0원 이하 (${s.latest}원) - 계산 중단`);
+      if (s.latest <= 0) {
+        console.error(`❌ 오류: 현재가가 0원 이하 (${s.latest}원)`);
       } else {
-        // ✅ 안전한 계산만 진행
+        // ✅ 0원 데이터는 쿼리에서 자동 제외됨
         const rise = ((s.max_price - s.min_price) / s.min_price * 100).toFixed(2);
         const buyPrice = Math.floor(s.min_price * 1.01);
         const diff = s.latest - buyPrice;

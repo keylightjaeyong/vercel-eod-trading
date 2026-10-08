@@ -419,19 +419,25 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // 144개 저점 계산 (안전성 체크)
+        // 144개 저점 계산 (0원 데이터 자동 제외)
         if (prices.length === 0) {
           console.error(`❌ [${name}] 유효한 가격 데이터 없음, 매수 스킵`);
           continue;
         }
 
-        const lowestPrice = Math.min(...prices);
-
-        // ⚠️ 저점이 0원 이하인 경우
-        if (lowestPrice <= 0) {
-          console.error(`❌ [${name}] 저점 계산 오류 (${lowestPrice}원), 매수 스킵`);
+        // ⚠️ 0원 또는 음수 데이터 필터링
+        const validPrices = prices.filter(p => p > 0);
+        if (validPrices.length === 0) {
+          console.error(`❌ [${name}] 모든 가격이 0원 이하 (${prices.length}개), 매수 스킵`);
           continue;
         }
+
+        if (validPrices.length < prices.length) {
+          const invalidCount = prices.length - validPrices.length;
+          console.warn(`⚠️ [${name}] 이상한 가격 ${invalidCount}개 제외 (${prices.length} → ${validPrices.length}개로 계산)`);
+        }
+
+        const lowestPrice = Math.min(...validPrices);
 
         const buyPrice = lowestPrice * (1 + risePercent / 100);
 
