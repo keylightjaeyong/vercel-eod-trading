@@ -459,21 +459,29 @@ export class KISApi {
 
         console.log(`✅ 주식잔고조회 성공: ${holdings.length}개 종목`);
 
-        // 예수금액 계산
-        const dncaTotAmt = parseInt(output2?.dnca_tot_amt || '0', 10);
+        // KIS API output2에서 주문 가능 정보 추출
+        const dncaTotAmt = parseInt(output2?.dnca_tot_amt || '0', 10); // 예수금액
+        const ordPsblCash = parseInt(output2?.ord_psbl_cash || '0', 10); // ✅ 주문 가능 현금 (KIS 검증된 금액)
+        const maxBuyQty = parseInt(output2?.max_buy_ordr_qty || '0', 10); // ✅ 최대 매수 가능 수량
 
-        // 추정된 주문 가능금액 = 예수금액 × 100% (공격적 전략)
-        const estimatedOrderAmount = dncaTotAmt;
-        console.log(`💰 주문 가능금액: ${dncaTotAmt.toLocaleString()}원 (100% 공격적 전략)`);
+        // 실제 주문 가능 금액 = ord_psbl_cash (KIS가 검증한 정확한 값)
+        const actualOrderableAmount = ordPsblCash > 0 ? ordPsblCash : dncaTotAmt;
+
+        console.log(`💰 KIS API 주문 가능 정보:`);
+        console.log(`   - ord_psbl_cash (주문 가능 현금): ${ordPsblCash.toLocaleString()}원`);
+        console.log(`   - max_buy_ordr_qty (최대 매수 수량): ${maxBuyQty.toLocaleString()}주`);
+        console.log(`   - dnca_tot_amt (예수금액): ${dncaTotAmt.toLocaleString()}원`);
 
         return {
           account_id: this.accountId,
           holdings,
           dnca_tot_amt: dncaTotAmt,
+          ord_psbl_cash: ordPsblCash, // ✅ 주문 가능 현금
+          max_buy_ordr_qty: maxBuyQty, // ✅ 최대 매수 수량
           evlu_amt_smtl: parseInt(output2?.scts_evlu_amt || '0', 10), // 유가증권 평가금액
           evlu_pfls_amt_smtl: parseInt(output2?.evlu_pfls_smtl_amt || '0', 10), // 평가손익합계
           tot_asst_amt: parseInt(output2?.tot_evlu_amt || '0', 10), // 총평가금액
-          estimated_order_amount: estimatedOrderAmount, // ✅ 추정된 주문 가능금액
+          estimated_order_amount: actualOrderableAmount, // ✅ 실제 주문 가능금액 (KIS 검증)
         };
       },
       '주식잔고조회'
