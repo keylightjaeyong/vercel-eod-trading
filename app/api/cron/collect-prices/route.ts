@@ -112,12 +112,16 @@ export async function POST(req: NextRequest) {
 
         console.log(`✅ [${name}] 현재가: ${currentPrice.toLocaleString()}원`);
 
+        // Node.js에서 KST 시간 계산 (DB 타임존 설정 우회)
+        const kstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+        const kstNowMinus3Min = new Date(kstNow.getTime() - 3 * 60 * 1000);
+
         // 중복 방지: 최근 3분 내 같은 가격 확인 (KST 기준)
         const recentPrice = await pool.query(
           `SELECT close FROM price_snapshots
-           WHERE code = $1 AND created_at > (NOW() AT TIME ZONE 'Asia/Seoul') - INTERVAL '3 minutes'
+           WHERE code = $1 AND created_at > $2
            ORDER BY created_at DESC LIMIT 1`,
-          [code]
+          [code, kstNowMinus3Min]
         );
 
         if (recentPrice.rows.length > 0 && recentPrice.rows[0].close == currentPrice) {
@@ -133,12 +137,12 @@ export async function POST(req: NextRequest) {
         }
 
         // price_snapshots에 저장 (현재 close 가격만 필수)
-        // NOW() AT TIME ZONE 'Asia/Seoul'로 정확한 KST 시간 저장
+        // Node.js에서 KST 시간을 계산하여 정확하게 저장
         const insertResult = await pool.query(
           `INSERT INTO price_snapshots
            (code, timestamp, close, created_at)
-           VALUES ($1, NOW() AT TIME ZONE 'Asia/Seoul', $2, NOW() AT TIME ZONE 'Asia/Seoul')`,
-          [code, currentPrice]
+           VALUES ($1, $2, $3, $2)`,
+          [code, kstNow, currentPrice]
         );
 
         console.log(`💾 INSERT 결과: rowCount=${insertResult.rowCount}, code=${code}`);
