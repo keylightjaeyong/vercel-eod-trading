@@ -699,10 +699,12 @@ export async function POST(req: NextRequest) {
               console.log(`   - 현재가: ${currentPrice.toLocaleString()}원`);
               console.log(`   - 예상 매수액: ${Math.floor(actualBuyQty * currentPrice).toLocaleString()}원`);
             } catch (orderableErr) {
-              console.warn(`⚠️ [${name}] 매수가능조회 실패: ${orderableErr instanceof Error ? orderableErr.message : String(orderableErr)}, 기존 방식 사용`);
-              // 폴백: 기존 방식 사용
-              const allocAmount = Math.floor(orderableAmount * (allocationPct / 100));
-              actualBuyQty = Math.floor(allocAmount / currentPrice);
+              console.warn(`⚠️ [${name}] 매수가능조회 실패: ${orderableErr instanceof Error ? orderableErr.message : String(orderableErr)}, 계좌잔액 기반 폴백`);
+              // 폴백: 계좌 잔액 기반 (증거금률, 수수료 미반영 - 보수적 계산)
+              // 손실을 피하기 위해 계좌잔액의 80%만 사용
+              const safeAmount = Math.floor(orderableAmount * 0.8 * (allocationPct / 100));
+              actualBuyQty = Math.floor(safeAmount / currentPrice);
+              console.log(`   - 폴백: 계좌잔액 80% 기반 매수수량 ${actualBuyQty}주 (보수적)`);
             }
 
             if (actualBuyQty > 0) {
