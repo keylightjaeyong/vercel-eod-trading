@@ -473,6 +473,15 @@ export async function POST(req: NextRequest) {
       try {
         console.log(`📊 [시도 ${attempt}/${maxRetries}] getBalance() 호출 중...`);
         const balanceData = await kis.getBalance();
+
+        // 상세 로깅
+        console.log(`📋 getBalance() 응답 상세:`);
+        console.log(`   - estimated_order_amount: ${balanceData.estimated_order_amount?.toLocaleString()}원`);
+        console.log(`   - dnca_tot_amt: ${balanceData.dnca_tot_amt?.toLocaleString()}원`);
+        console.log(`   - tot_asst_amt: ${balanceData.tot_asst_amt?.toLocaleString()}원`);
+        console.log(`   - evlu_amt_smtl: ${balanceData.evlu_amt_smtl?.toLocaleString()}원`);
+        console.log(`   - holdings 개수: ${balanceData.holdings?.length || 0}개`);
+
         orderableAmount = balanceData.estimated_order_amount || balanceData.dnca_tot_amt || 0;
 
         if (orderableAmount > 0) {
