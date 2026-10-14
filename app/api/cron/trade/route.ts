@@ -684,14 +684,26 @@ export async function POST(req: NextRequest) {
               console.warn(`⚠️ 할당비율 조회 실패, 기본값 100% 사용: ${err}`);
             }
 
-            // 할당 비율에 따른 매수 수량 계산 (KIS 실제 잔액 기반)
-            const allocAmount = Math.floor(orderableAmount * (allocationPct / 100));
-            const actualBuyQty = Math.floor(allocAmount / currentPrice);
+            // 매수가능조회 API 사용 (공식 권장 - 증거금률, 수수료 포함)
+            let actualBuyQty = 0;
+            try {
+              const orderableQty = await kis.getOrderableAmount(code, currentPrice);
+              const maxAvailableQty = orderableQty.nrcvb_buy_qty; // 미수없는 매수 수량
 
-            console.log(`💰 [${name}] KIS 실제 잔액: ${orderableAmount.toLocaleString()}원`);
-            console.log(`💰 [${name}] 할당비율 ${allocationPct}% 적용 → 할당액: ${allocAmount.toLocaleString()}원`);
-            console.log(`💰 [${name}] 현재가: ${currentPrice.toLocaleString()}원 → 매수수량: ${actualBuyQty}주`);
-            console.log(`💰 [${name}] 예상 매수액: ${Math.floor(actualBuyQty * currentPrice).toLocaleString()}원`);
+              // allocation_pct 적용
+              actualBuyQty = Math.floor(maxAvailableQty * (allocationPct / 100));
+
+              console.log(`💰 [${name}] KIS 매수가능조회 결과:`);
+              console.log(`   - 미수없는매수수량: ${maxAvailableQty.toLocaleString()}주`);
+              console.log(`   - 할당비율 ${allocationPct}% 적용 → 최종매수수량: ${actualBuyQty}주`);
+              console.log(`   - 현재가: ${currentPrice.toLocaleString()}원`);
+              console.log(`   - 예상 매수액: ${Math.floor(actualBuyQty * currentPrice).toLocaleString()}원`);
+            } catch (orderableErr) {
+              console.warn(`⚠️ [${name}] 매수가능조회 실패: ${orderableErr instanceof Error ? orderableErr.message : String(orderableErr)}, 기존 방식 사용`);
+              // 폴백: 기존 방식 사용
+              const allocAmount = Math.floor(orderableAmount * (allocationPct / 100));
+              actualBuyQty = Math.floor(allocAmount / currentPrice);
+            }
 
             if (actualBuyQty > 0) {
               // 매수 실행 (재시도 로직 포함)
