@@ -184,7 +184,13 @@ export async function POST(req: NextRequest) {
 
         // 현재가 조회 (재시도 로직 포함)
         const priceData = await kis.retryGetPrice(code, exchangeCode);
-        const currentPrice = priceData.current;
+        const currentPrice = priceData.current || 0;
+
+        // 현재가 0 체크
+        if (currentPrice <= 0) {
+          console.warn(`⚠️ [${name}] 현재가 조회 실패 (${currentPrice}원), 매도 신호 스킵`);
+          continue;
+        }
 
         console.log(`   현재가: ${currentPrice.toLocaleString()}원`);
 
