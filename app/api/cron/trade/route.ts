@@ -427,7 +427,7 @@ export async function POST(req: NextRequest) {
         console.log('✅ DB에서 설정 조회 (enabled은 환경변수 사용)');
       }
     } catch (dbErr: any) {
-      console.log('⚠️ DB 조회 실패, 환경변수 기본값 사용');
+      console.log('⚠️ trading_config 조회 실패, stocks 테이블에서 직접 조회');
     }
 
     const { enabled } = config.global_settings;
@@ -437,8 +437,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: '매수만 중단 (손절매는 작동)' });
     }
 
-    // 2. 종목 조회 (config에서 직접 읽음)
-    const stocks = (config.stocks || []).filter((s: any) => s.enabled);
+    // 2. 종목 조회 (config에서 읽거나 DB의 stocks 테이블에서 직접 조회)
+    let stocks = (config.stocks || []).filter((s: any) => s.enabled);
+
+    if (stocks.length === 0) {
+      console.log('⚠️ config.stocks 비어있음, stocks 테이블에서 직접 조회...');
+      const stocksResult = await pool.query(
+        'SELECT code, name FROM stocks WHERE enabled = true'
+      );
+      stocks = stocksResult.rows;
+      console.log(`✅ stocks 테이블에서 ${stocks.length}개 활성화 종목 조회`);
+    }
 
     if (stocks.length === 0) {
       console.log('📭 활성화된 종목 없음');
