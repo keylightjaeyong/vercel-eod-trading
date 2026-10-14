@@ -684,15 +684,14 @@ export async function POST(req: NextRequest) {
               console.warn(`⚠️ 할당비율 조회 실패, 기본값 100% 사용: ${err}`);
             }
 
-            // 할당 비율에 따른 매수 수량 계산 (KIS 검증 고려한 안전 계수 85%)
-            const safeBudget = Math.floor(orderableAmount * 0.85);
-            const allocAmount = Math.floor(safeBudget * (allocationPct / 100));
+            // 할당 비율에 따른 매수 수량 계산 (KIS 실제 잔액 기반)
+            const allocAmount = Math.floor(orderableAmount * (allocationPct / 100));
             const actualBuyQty = Math.floor(allocAmount / currentPrice);
 
-            console.log(`💰 [${name}] 계좌잔액: ${orderableAmount.toLocaleString()}원`);
-            console.log(`💰 [${name}] 안전예산(85%): ${safeBudget.toLocaleString()}원`);
-            console.log(`💰 [${name}] 할당비율 ${allocationPct}% 적용 → 할당액: ${allocAmount.toLocaleString()}원 → 매수수량: ${actualBuyQty}주`);
-            console.log(`💰 [${name}] 예상 매수액: ${Math.floor(actualBuyQty * currentPrice).toLocaleString()}원 (현재가 ${currentPrice.toLocaleString()}원)`);
+            console.log(`💰 [${name}] KIS 실제 잔액: ${orderableAmount.toLocaleString()}원`);
+            console.log(`💰 [${name}] 할당비율 ${allocationPct}% 적용 → 할당액: ${allocAmount.toLocaleString()}원`);
+            console.log(`💰 [${name}] 현재가: ${currentPrice.toLocaleString()}원 → 매수수량: ${actualBuyQty}주`);
+            console.log(`💰 [${name}] 예상 매수액: ${Math.floor(actualBuyQty * currentPrice).toLocaleString()}원`);
 
             if (actualBuyQty > 0) {
               // 매수 실행 (재시도 로직 포함)
