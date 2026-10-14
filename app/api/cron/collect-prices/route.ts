@@ -112,10 +112,10 @@ export async function POST(req: NextRequest) {
 
         console.log(`✅ [${name}] 현재가: ${currentPrice.toLocaleString()}원`);
 
-        // 중복 방지: 최근 3분 내 같은 가격 확인
+        // 중복 방지: 최근 3분 내 같은 가격 확인 (KST 기준)
         const recentPrice = await pool.query(
           `SELECT close FROM price_snapshots
-           WHERE code = $1 AND created_at > NOW() - INTERVAL '3 minutes'
+           WHERE code = $1 AND created_at > (NOW() AT TIME ZONE 'Asia/Seoul') - INTERVAL '3 minutes'
            ORDER BY created_at DESC LIMIT 1`,
           [code]
         );
@@ -133,10 +133,11 @@ export async function POST(req: NextRequest) {
         }
 
         // price_snapshots에 저장 (현재 close 가격만 필수)
+        // NOW() AT TIME ZONE 'Asia/Seoul'로 정확한 KST 시간 저장
         const insertResult = await pool.query(
           `INSERT INTO price_snapshots
            (code, timestamp, close, created_at)
-           VALUES ($1, CURRENT_TIMESTAMP, $2, CURRENT_TIMESTAMP)`,
+           VALUES ($1, NOW() AT TIME ZONE 'Asia/Seoul', $2, NOW() AT TIME ZONE 'Asia/Seoul')`,
           [code, currentPrice]
         );
 
