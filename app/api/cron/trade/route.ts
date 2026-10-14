@@ -465,26 +465,53 @@ export async function POST(req: NextRequest) {
     const kis = new KISApi();
     kis.updateEnv();
 
-    let totalCapital = 300000; // 기본값
-    let orderableAmount = 300000; // 기본값 (100% 공격적 전략)
+    let orderableAmount = 0;
 
-    try {
-      // 계좌 잔액 조회 (예수금액)
-      const accountData = await kis.getAccount();
-      totalCapital = accountData.balance;
-      console.log(`💰 계좌 잔액: ${totalCapital.toLocaleString()}원`);
-    } catch (err) {
-      console.warn(`⚠️ 계좌 잔액 조회 실패, 기본값 300,000원 사용: ${err}`);
+    // 1단계: getBalance()로 실제 예수금액 조회 (재시도 로직 포함)
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📊 [시도 ${attempt}/${maxRetries}] getBalance() 호출 중...`);
+        const balanceData = await kis.getBalance();
+        orderableAmount = balanceData.estimated_order_amount || balanceData.dnca_tot_amt || 0;
+
+        if (orderableAmount > 0) {
+          console.log(`✅ 실제 예수금액 (getBalance): ${orderableAmount.toLocaleString()}원`);
+          break; // 성공하면 루프 탈출
+        }
+      } catch (err) {
+        console.warn(`⚠️ [시도 ${attempt}/${maxRetries}] getBalance() 실패: ${err instanceof Error ? err.message : String(err)}`);
+        if (attempt < maxRetries) {
+          // 재시도 전 대기
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+        }
+      }
     }
 
-    try {
-      // 보유 포지션 조회 (주문 가능금액 추정)
-      const balanceData = await kis.getBalance();
-      orderableAmount = balanceData.estimated_order_amount || Math.floor(totalCapital * 0.85);
-      console.log(`💵 주문 가능금액 추정: ${orderableAmount.toLocaleString()}원`);
-    } catch (err) {
-      console.warn(`⚠️ 보유 포지션 조회 실패, 기본값 사용: ${err}`);
-      orderableAmount = totalCapital; // 100% 공격적 전략
+    // 2단계: getBalance() 재시도 실패 시 getAccount()로 시도
+    if (orderableAmount === 0) {
+      try {
+        console.log(`📊 getAccount() 호출 중...`);
+        const accountData = await kis.getAccount();
+        orderableAmount = accountData.balance || 0;
+
+        if (orderableAmount > 0) {
+          console.log(`✅ 계좌 잔액 (getAccount): ${orderableAmount.toLocaleString()}원`);
+        }
+      } catch (err) {
+        console.error(`❌ getAccount() 실패: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // 3단계: 둘 다 실패하면 에러 반환
+    if (orderableAmount === 0) {
+      console.error(`❌ KIS API에서 실제 잔액을 조회할 수 없습니다!`);
+      return NextResponse.json({
+        success: false,
+        message: '❌ 계좌 잔액 조회 실패 - KIS API 호출 오류',
+        error: 'getBalance/getAccount 모두 실패',
+        results: []
+      });
     }
 
     let buyCount = 0;
