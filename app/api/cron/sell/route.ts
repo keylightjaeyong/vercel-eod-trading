@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
 
     // 2. 현재 보유 포지션 조회 (trade_positions 테이블에서)
     const positionsResult = await pool.query(
-      `SELECT id, code, name, quantity, entry_price, entry_time, market_regime
+      `SELECT id, code, name, quantity, entry_price, entry_time
        FROM trade_positions
        WHERE status = 'holding'
        ORDER BY entry_time ASC`
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
     // 4. 각 포지션별 매도 판정
     for (const position of positionsResult.rows) {
       try {
-        const { id, code, name, quantity, entry_price, entry_time, market_regime } = position;
+        const { id, code, name, quantity, entry_price, entry_time } = position;
 
         console.log(`\n💼 [${name}(${code})] 포지션 분석 시작`);
         console.log(`   진입가: ${entry_price.toLocaleString()}원, 수량: ${quantity}주`);
@@ -220,48 +220,36 @@ export async function POST(req: NextRequest) {
           console.log(`⚠️ 가격 이력 조회 실패`);
         }
 
-        // ✅ 매도 신호 판정 (3가지 조건) - 시장 체제별 적용
+        // ✅ 매도 신호 판정 (4가지 조건)
         let shouldSell = false;
         let sellReason = '';
         let sellPrice = currentPrice;
 
-        // 시장 체제별 손절 기준
-        let stopLossPct = -2.0;      // 기본값
-        let trailingStopPct = -0.5;  // 기본값 (-0.5%)
-
-        if (market_regime === 'UPTREND') {
-          stopLossPct = -2.0;
-          trailingStopPct = -0.5;
-        } else if (market_regime === 'DOWNTREND') {
-          stopLossPct = -1.5;
-          trailingStopPct = -0.3;
-        } else if (market_regime === 'SIDEWAYS') {
-          stopLossPct = -1.5;
-          trailingStopPct = -0.5;
-        }
-
-        console.log(`   시장 체제: ${market_regime || '불명'} (손절: ${stopLossPct}%, 트레일링: ${trailingStopPct}%)`);
-
         // 1️⃣ 손절매 (손실 제한)
+        // stop_loss_pct: -2.0% 손실 시 매도
+        const stopLossPct = sellConfig.stop_loss_pct || -2.0;
         if (!shouldSell && profitPct <= stopLossPct) {
           shouldSell = true;
           sellReason = `손절매 (${stopLossPct}% 손실 제한)`;
           console.log(`⛔ ${sellReason}`);
         }
 
-        // 2️⃣ 추적 손절매 (수익 보호) - 최소 3개 데이터 필수
-        // 최고가 대비 트레일링 손절 비율 적용
+        // 2️⃣ 동적 손절매 (수익 보호) - 최소 3개 데이터 필수
+        // trailing_stop_loss_pct: 최고가에서 올라간 수익의 N% 손실 시
         if (!shouldSell && recentPrices.length > 3) {
+          const trailingStopLossPct = sellConfig.trailing_stop_loss_pct || 0.2;
           const highestPrice = Math.max(...recentPrices);
-          const trailingStopPrice = Math.max(
+          const profitFromEntry = highestPrice - entry_price;
+
+          const dynamicStopLoss = Math.max(
             entry_price,
-            highestPrice * (1 + trailingStopPct / 100)
+            highestPrice - profitFromEntry * trailingStopLossPct
           );
 
-          if (currentPrice <= trailingStopPrice) {
+          if (currentPrice <= dynamicStopLoss) {
             shouldSell = true;
-            const trailingLoss = ((currentPrice - highestPrice) / highestPrice * 100).toFixed(2);
-            sellReason = `추적손절 (최고가 ${highestPrice.toLocaleString()}에서 ${trailingLoss}% 하락)`;
+            const trailingPctPercent = (trailingStopLossPct * 100).toFixed(0);
+            sellReason = `동적 손절 (최고가 ${highestPrice.toLocaleString()}에서 수익의 ${trailingPctPercent}% 손실)`;
             console.log(`⛔ ${sellReason}`);
           }
         }
