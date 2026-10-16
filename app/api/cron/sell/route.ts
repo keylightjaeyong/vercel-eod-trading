@@ -381,18 +381,24 @@ export async function POST(req: NextRequest) {
                 console.log(`⚠️ [${name}] trade_history 저장 실패: ${saveErr.message}`);
               }
 
-              // trade_positions 업데이트
+              // trade_positions 업데이트 (재진입 기준 포함)
               try {
                 // profit_loss = (판매가 - 진입가) × 수량 (전체 손익)
                 const totalProfitLoss = (sellPrice - entry_price) * actualSellQty;
+
+                // 재진입 기준: 매도가 × 1.02
+                const reentryThreshold = Math.floor(sellPrice * 1.02);
+
                 await pool.query(
                   `UPDATE trade_positions
                    SET status = 'sold', exit_price = $1, exit_time = CURRENT_TIMESTAMP,
-                       profit_loss = $2, updated_at = CURRENT_TIMESTAMP
-                   WHERE id = $3`,
-                  [sellPrice, totalProfitLoss, id]
+                       profit_loss = $2, reentry_threshold = $3, last_reference_low = $4,
+                       updated_at = CURRENT_TIMESTAMP
+                   WHERE id = $5`,
+                  [sellPrice, totalProfitLoss, reentryThreshold, sellPrice, id]
                 );
-                console.log(`✅ [${name}] trade_positions 업데이트 완료 (실현손익: ${totalProfitLoss.toLocaleString()}원)`);
+                console.log(`✅ [${name}] 매도 완료: ${sellPrice.toLocaleString()}원`);
+                console.log(`   → 재진입 기준: ${reentryThreshold.toLocaleString()}원 (×1.02)`)
               } catch (updateErr: any) {
                 console.error(`❌ [${name}] trade_positions 업데이트 실패: ${updateErr.message}`);
               }
