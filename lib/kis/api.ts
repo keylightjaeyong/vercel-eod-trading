@@ -588,9 +588,9 @@ export class KISApi {
             ACNT_PRDT_CD: acntPrdtCd,
             PDNO: code,
             ORD_UNPR: currentPrice.toString(),
-            ORD_DVSN: '01', // 시장가
+            ORD_DVSN: '01', // ✅ 시장가 (예수금으로 매수 가능하려면 필수!)
             CMA_EVLU_AMT_ICLD_YN: 'Y', // CMA 포함
-            OVRS_ICLD_YN: 'N', // 해외 제외
+            ONLY_ORD_PSBL_YN: 'N', // 주문 가능 여부만 조회 (N = 상세 조회)
           },
         }
       );

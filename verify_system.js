@@ -25,9 +25,9 @@ async function verify() {
       console.log('⚠️ 최근 5분 내 수집된 데이터 없음');
     } else {
       priceResult.rows.forEach(row => {
-        const latestTime = new Date(row.latest);
-        const kstTime = new Date(latestTime.getTime() + 9 * 60 * 60 * 1000);
-        console.log(`✅ ${row.code}: ${row.count}개 (최신: ${kstTime.toLocaleTimeString('ko-KR')} KST)`);
+        const utcTime = new Date(row.latest);
+        const kstTime = new Date(utcTime.getTime() + 9 * 60 * 60 * 1000);
+        console.log(`✅ ${row.code}: ${row.count}개 (최신: ${kstTime.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' })} KST)`);
       });
     }
 
