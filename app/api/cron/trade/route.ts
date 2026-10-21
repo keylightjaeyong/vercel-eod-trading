@@ -648,19 +648,35 @@ export async function POST(req: NextRequest) {
         if (lastClosed.rows.length > 0) {
           const { exit_price, reentry_threshold, last_reference_low } = lastClosed.rows[0];
 
-          // ⭐ 동적 재진입 임계값 계산 (비율 기반 1%)
-          // 극강 저점 × 1.01 기준으로 매번 재계산 (극강 저점 근처에서 재진입)
+          // ⭐ 동적 재진입 임계값 계산 (극강저점 + 시장 상황별 상승폭)
+          // 극강 저점을 기준으로 시장 상황에 따라 다른 상승폭 적용
           const validPrices = prices.filter(p => p > 0);
           const currentLowest = Math.min(...validPrices);
-          const dynamicReentryThreshold = Math.floor(currentLowest * 1.01); // 저점 × 1.01 (1% 상승)
+
+          // 극강저점 우선 사용 (없으면 현재 저점)
+          const reentryLowest = last_reference_low || currentLowest;
+
+          // 시장 상황별 상승폭 설정
+          let reentryRisePercent = 1.0;
+          if (marketRegime === 'UPTREND') {
+            reentryRisePercent = 1.0;   // 상승장: 1.0%
+          } else if (marketRegime === 'DOWNTREND') {
+            reentryRisePercent = 0.5;   // 하락장: 0.5%
+          } else {
+            reentryRisePercent = 0.8;   // 횡보장: 0.8%
+          }
+
+          const dynamicReentryThreshold = Math.floor(reentryLowest * (1 + reentryRisePercent / 100));
 
           // DB 기준값 vs 동적값 중 더 관대한 값 선택 (작은 값)
           const effectiveReentryThreshold = Math.min(reentry_threshold || Infinity, dynamicReentryThreshold);
 
-          console.log(`🔄 [${name}] 재진입 기준 계산 (비율 기반 1%):`);
+          console.log(`🔄 [${name}] 재진입 기준 계산 (시장별 상승폭):`);
           console.log(`   - DB 저장값: ${reentry_threshold?.toLocaleString()}원`);
+          console.log(`   - 극강 저점: ${reentryLowest?.toLocaleString()}원`);
           console.log(`   - 현재 저점: ${currentLowest.toLocaleString()}원`);
-          console.log(`   - 동적값: ${dynamicReentryThreshold.toLocaleString()}원 (저점 × 1.01, 1% 상승)`);
+          console.log(`   - 시장 상황: ${marketRegime} (상승폭: ${reentryRisePercent}%)`);
+          console.log(`   - 동적값: ${dynamicReentryThreshold.toLocaleString()}원 (극강저점 × ${(1 + reentryRisePercent / 100).toFixed(3)})`);
           console.log(`   - 실제 적용: ${effectiveReentryThreshold.toLocaleString()}원 (더 관대한 기준)`);
 
           // ✅ 재진입 조건: 현재가 >= 실제 적용 기준값
