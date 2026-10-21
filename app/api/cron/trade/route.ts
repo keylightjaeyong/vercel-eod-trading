@@ -648,19 +648,19 @@ export async function POST(req: NextRequest) {
         if (lastClosed.rows.length > 0) {
           const { exit_price, reentry_threshold, last_reference_low } = lastClosed.rows[0];
 
-          // ⭐ 동적 재진입 임계값 계산 (비율 기반 2%)
-          // 극강 저점 × 1.02 기준으로 매번 재계산 (가격에 무관한 일관성)
+          // ⭐ 동적 재진입 임계값 계산 (비율 기반 1%)
+          // 극강 저점 × 1.01 기준으로 매번 재계산 (극강 저점 근처에서 재진입)
           const validPrices = prices.filter(p => p > 0);
           const currentLowest = Math.min(...validPrices);
-          const dynamicReentryThreshold = Math.floor(currentLowest * 1.02); // 저점 × 1.02 (2% 상승)
+          const dynamicReentryThreshold = Math.floor(currentLowest * 1.01); // 저점 × 1.01 (1% 상승)
 
           // DB 기준값 vs 동적값 중 더 관대한 값 선택 (작은 값)
           const effectiveReentryThreshold = Math.min(reentry_threshold || Infinity, dynamicReentryThreshold);
 
-          console.log(`🔄 [${name}] 재진입 기준 계산 (비율 기반 2%):`);
+          console.log(`🔄 [${name}] 재진입 기준 계산 (비율 기반 1%):`);
           console.log(`   - DB 저장값: ${reentry_threshold?.toLocaleString()}원`);
           console.log(`   - 현재 저점: ${currentLowest.toLocaleString()}원`);
-          console.log(`   - 동적값: ${dynamicReentryThreshold.toLocaleString()}원 (저점 × 1.02, 2% 상승)`);
+          console.log(`   - 동적값: ${dynamicReentryThreshold.toLocaleString()}원 (저점 × 1.01, 1% 상승)`);
           console.log(`   - 실제 적용: ${effectiveReentryThreshold.toLocaleString()}원 (더 관대한 기준)`);
 
           // ✅ 재진입 조건: 현재가 >= 실제 적용 기준값

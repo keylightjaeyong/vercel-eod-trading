@@ -386,8 +386,8 @@ export async function POST(req: NextRequest) {
                 // profit_loss = (판매가 - 진입가) × 수량 (전체 손익)
                 const totalProfitLoss = (sellPrice - entry_price) * actualSellQty;
 
-                // 재진입 기준: 매도가 × 1.02 (2% 상승 기준)
-                const reentryThreshold = Math.floor(sellPrice * 1.02);
+                // 재진입 기준: 매도가 × 1.01 (1% 상승 기준)
+                const reentryThreshold = Math.floor(sellPrice * 1.01);
 
                 await pool.query(
                   `UPDATE trade_positions
