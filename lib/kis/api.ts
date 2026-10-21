@@ -59,6 +59,7 @@ interface BalanceData {
 
 interface OrderableData {
   ord_psbl_cash: number; // 주문가능현금
+  ruse_psbl_amt: number; // 재사용가능금액 ← T+2 대기 중에도 사용 가능! (매도 → 즉시 재매수용)
   nrcvb_buy_amt: number; // 미수없는매수금액
   nrcvb_buy_qty: number; // 미수없는매수수량 ← 실제 매수 가능 수량
   max_buy_qty: number; // 최대매수수량
@@ -602,6 +603,7 @@ export class KISApi {
       const output = response.data.output || {};
       const orderableData: OrderableData = {
         ord_psbl_cash: parseInt(output.ord_psbl_cash || '0', 10), // 주문가능현금
+        ruse_psbl_amt: parseInt(output.ruse_psbl_amt || '0', 10), // 재사용가능금액
         nrcvb_buy_amt: parseInt(output.nrcvb_buy_amt || '0', 10), // 미수없는매수금액
         nrcvb_buy_qty: parseInt(output.nrcvb_buy_qty || '0', 10), // 미수없는매수수량 ← 실제 사용값
         max_buy_qty: parseInt(output.max_buy_qty || '0', 10), // 최대매수수량
@@ -609,6 +611,7 @@ export class KISApi {
 
       console.log(`✅ 매수가능조회 성공:`);
       console.log(`   주문가능현금: ${orderableData.ord_psbl_cash.toLocaleString()}원`);
+      console.log(`   재사용가능금액: ${orderableData.ruse_psbl_amt.toLocaleString()}원 ⭐ (T+2 대기 중에도 사용 가능!)`);
       console.log(`   미수없는매수수량: ${orderableData.nrcvb_buy_qty.toLocaleString()}주 ← 이 값 사용!`);
       console.log(`   최대매수수량: ${orderableData.max_buy_qty.toLocaleString()}주`);
 

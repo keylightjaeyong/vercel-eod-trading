@@ -724,13 +724,24 @@ export async function POST(req: NextRequest) {
             let actualBuyQty = 0;
             try {
               const orderableQty = await kis.getOrderableAmount(code, currentPrice);
-              const maxAvailableQty = orderableQty.nrcvb_buy_qty; // 미수없는 매수 수량
+
+              // ⭐ T+2 대기 중에도 사용 가능한 재사용가능금액(ruse_psbl_amt) 우선 사용!
+              const usableAmount = orderableQty.ruse_psbl_amt > 0
+                ? orderableQty.ruse_psbl_amt
+                : orderableQty.ord_psbl_cash;
+
+              const maxAvailableQty = usableAmount > 0
+                ? Math.floor(usableAmount / currentPrice)
+                : orderableQty.nrcvb_buy_qty; // 금액이 없으면 수량 사용
 
               // allocation_pct 적용
               actualBuyQty = Math.floor(maxAvailableQty * (allocationPct / 100));
 
               console.log(`💰 [${name}] KIS 매수가능조회 결과:`);
-              console.log(`   - 미수없는매수수량: ${maxAvailableQty.toLocaleString()}주`);
+              console.log(`   - 재사용가능금액: ${orderableQty.ruse_psbl_amt.toLocaleString()}원 ⭐ (T+2 대기 중에도 사용 가능!)`);
+              console.log(`   - 주문가능현금: ${orderableQty.ord_psbl_cash.toLocaleString()}원`);
+              console.log(`   - 미수없는매수수량: ${orderableQty.nrcvb_buy_qty.toLocaleString()}주`);
+              console.log(`   - 사용금액: ${usableAmount.toLocaleString()}원 → 최대수량: ${maxAvailableQty.toLocaleString()}주`);
               console.log(`   - 할당비율 ${allocationPct}% 적용 → 최종매수수량: ${actualBuyQty}주`);
               console.log(`   - 현재가: ${currentPrice.toLocaleString()}원`);
               console.log(`   - 예상 매수액: ${Math.floor(actualBuyQty * currentPrice).toLocaleString()}원`);
