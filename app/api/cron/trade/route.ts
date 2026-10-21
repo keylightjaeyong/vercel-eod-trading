@@ -646,7 +646,23 @@ export async function POST(req: NextRequest) {
         );
 
         if (lastClosed.rows.length > 0) {
-          const { exit_price, reentry_threshold, last_reference_low } = lastClosed.rows[0];
+          let { exit_price, reentry_threshold, last_reference_low } = lastClosed.rows[0];
+
+          // 📍 극강저점 실시간 업데이트 (매도 후 더 낮은 가격 발견 시)
+          const updatedLowest = Math.min(currentPrice, last_reference_low || Infinity);
+          if (updatedLowest < (last_reference_low || Infinity)) {
+            try {
+              await pool.query(
+                `UPDATE trade_positions SET last_reference_low = $1, updated_at = CURRENT_TIMESTAMP
+                 WHERE code = $2 AND status = 'sold' ORDER BY exit_time DESC LIMIT 1`,
+                [updatedLowest, code]
+              );
+              console.log(`📍 [${name}] 극강저점 업데이트: ${last_reference_low?.toLocaleString()}원 → ${updatedLowest.toLocaleString()}원`);
+              last_reference_low = updatedLowest;
+            } catch (updateErr) {
+              console.error(`⚠️ [${name}] 극강저점 업데이트 실패: ${updateErr instanceof Error ? updateErr.message : String(updateErr)}`);
+            }
+          }
 
           // ⭐ 동적 재진입 임계값 계산 (극강저점 + 시장 상황별 상승폭)
           // 극강 저점을 기준으로 시장 상황에 따라 다른 상승폭 적용
