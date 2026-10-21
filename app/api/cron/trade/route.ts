@@ -648,15 +648,29 @@ export async function POST(req: NextRequest) {
         if (lastClosed.rows.length > 0) {
           const { exit_price, reentry_threshold, last_reference_low } = lastClosed.rows[0];
 
-          // ⭐ 재진입 조건: 현재가 >= 재진입 임계값만 확인 (단순화!)
-          // 극강 저점에서 충분히 회복했으면 즉시 재매수
-          if (currentPrice >= reentry_threshold) {
+          // ⭐ 동적 재진입 임계값 계산 (하락장 대응)
+          // 극강 저점 + 3,000원 기준으로 매번 재계산
+          const validPrices = prices.filter(p => p > 0);
+          const currentLowest = Math.min(...validPrices);
+          const dynamicReentryThreshold = currentLowest + 3000; // 현재 저점 + 3,000원
+
+          // DB 기준값 vs 동적값 중 더 관대한 값 선택 (작은 값)
+          const effectiveReentryThreshold = Math.min(reentry_threshold || Infinity, dynamicReentryThreshold);
+
+          console.log(`🔄 [${name}] 재진입 기준 계산:`);
+          console.log(`   - DB 저장값: ${reentry_threshold?.toLocaleString()}원`);
+          console.log(`   - 현재 저점: ${currentLowest.toLocaleString()}원`);
+          console.log(`   - 동적값: ${dynamicReentryThreshold.toLocaleString()}원 (저점 + 3,000원)`);
+          console.log(`   - 실제 적용: ${effectiveReentryThreshold.toLocaleString()}원 (더 관대한 기준)`);
+
+          // ✅ 재진입 조건: 현재가 >= 실제 적용 기준값
+          if (currentPrice >= effectiveReentryThreshold) {
             console.log(
-              `✅ [${name}] 재진입 조건 만족: ${currentPrice.toLocaleString()}원 >= ${reentry_threshold?.toLocaleString()}원 (기준)`
+              `✅ [${name}] 재진입 조건 만족: ${currentPrice.toLocaleString()}원 >= ${effectiveReentryThreshold?.toLocaleString()}원`
             );
           } else {
             console.log(
-              `⏳ [${name}] 재진입 대기: ${currentPrice.toLocaleString()}원 < ${reentry_threshold?.toLocaleString()}원 (기준)`
+              `⏳ [${name}] 재진입 대기: ${currentPrice.toLocaleString()}원 < ${effectiveReentryThreshold?.toLocaleString()}원`
             );
             continue;
           }
