@@ -648,28 +648,18 @@ export async function POST(req: NextRequest) {
         if (lastClosed.rows.length > 0) {
           const { exit_price, reentry_threshold, last_reference_low } = lastClosed.rows[0];
 
-          // 조건 1: 현재가가 재진입 기준 이상인가?
-          if (currentPrice < reentry_threshold) {
+          // ⭐ 재진입 조건: 현재가 >= 재진입 임계값만 확인 (단순화!)
+          // 극강 저점에서 충분히 회복했으면 즉시 재매수
+          if (currentPrice >= reentry_threshold) {
+            console.log(
+              `✅ [${name}] 재진입 조건 만족: ${currentPrice.toLocaleString()}원 >= ${reentry_threshold?.toLocaleString()}원 (기준)`
+            );
+          } else {
             console.log(
               `⏳ [${name}] 재진입 대기: ${currentPrice.toLocaleString()}원 < ${reentry_threshold?.toLocaleString()}원 (기준)`
             );
             continue;
           }
-
-          // 조건 3: 새 저점이 이전 매도가 아래인가?
-          const validPrices = prices.filter(p => p > 0);
-          const currentLowest = Math.min(...validPrices);
-
-          if (currentLowest >= last_reference_low) {
-            console.log(
-              `⏳ [${name}] 새로운 저점 필요: ${currentLowest.toLocaleString()}원 >= ${last_reference_low?.toLocaleString()}원`
-            );
-            continue;
-          }
-
-          console.log(
-            `✅ [${name}] 재진입 조건 만족: 현재 ${currentPrice.toLocaleString()}원 > 기준 ${reentry_threshold?.toLocaleString()}원, 저점 ${currentLowest.toLocaleString()}원 < 기준 ${last_reference_low?.toLocaleString()}원`
-          );
         }
 
         // 144개 저점 계산 (0원 데이터 자동 제외)
