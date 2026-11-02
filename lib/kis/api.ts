@@ -99,8 +99,17 @@ export class KISApi {
     this.accountId = process.env.KIS_ACCOUNT || '';
     this.baseUrl = process.env.KIS_BASE_URL || 'https://openapi.koreainvestment.com:9443';
 
+    // 환경 변수 검증 (상세 로깅)
+    console.log(`🔍 KIS 환경변수 검증:`);
+    console.log(`   - KIS_APPKEY: ${this.appKey ? '✅ 설정됨' : '❌ 미설정'}`);
+    console.log(`   - KIS_SECRET: ${this.appSecret ? '✅ 설정됨' : '❌ 미설정'}`);
+    console.log(`   - KIS_ACCOUNT: ${this.accountId ? '✅ 설정됨' : '⚠️ 미설정 (선택)'}`);
+    console.log(`   - KIS_BASE_URL: ${this.baseUrl}`);
+
     if (!this.appKey || !this.appSecret) {
-      console.warn(`⚠️ KIS 환경변수 부재: appKey=${!!this.appKey}, secret=${!!this.appSecret}`);
+      const errorMsg = `❌ KIS 필수 환경변수 부재: appKey=${!!this.appKey}, secret=${!!this.appSecret}`;
+      console.error(errorMsg);
+      throw new Error(errorMsg);
     }
   }
 

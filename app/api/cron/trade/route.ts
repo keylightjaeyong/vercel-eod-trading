@@ -462,8 +462,21 @@ export async function POST(req: NextRequest) {
     console.log(`🚀 거래 시작: ${stocks.length}개 종목`);
 
     // 3. KIS API 초기화 및 계좌 정보 조회
-    const kis = new KISApi();
-    kis.updateEnv();
+    let kis: any;
+    try {
+      kis = new KISApi();
+      kis.updateEnv(); // 환경 변수 검증 및 로드
+      console.log('✅ KIS API 초기화 완료');
+    } catch (initErr: any) {
+      const errorMsg = `❌ KIS API 초기화 실패: ${initErr.message}`;
+      console.error(errorMsg);
+      return NextResponse.json({
+        success: false,
+        message: errorMsg,
+        details: '환경 변수 확인: KIS_APPKEY, KIS_SECRET이 설정되어 있는지 확인하세요.',
+        results: [],
+      }, { status: 500 });
+    }
 
     let orderableAmount = 0;
 
