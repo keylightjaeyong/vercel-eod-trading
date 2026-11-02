@@ -666,8 +666,8 @@ export async function POST(req: NextRequest) {
 
           // ⭐ 동적 재진입 임계값 계산 (극강저점 + 시장 상황별 상승폭)
           // 극강 저점을 기준으로 시장 상황에 따라 다른 상승폭 적용
-          const validPrices = prices.filter(p => p > 0);
-          const currentLowest = Math.min(...validPrices);
+          const reentryValidPrices = prices.filter(p => p > 0);
+          const currentLowest = Math.min(...reentryValidPrices);
 
           // 극강저점 우선 사용 (없으면 현재 저점)
           const reentryLowest = last_reference_low || currentLowest;
@@ -828,6 +828,10 @@ export async function POST(req: NextRequest) {
 
               // 거래 이력 저장 (ADX 정보 포함)
               try {
+                console.log(`📝 [${name}] trade_history 저장 시도:`);
+                console.log(`   - 코드: ${code}, 수량: ${actualBuyQty}주, 가격: ${currentPrice.toLocaleString()}원`);
+                console.log(`   - 시장: ${marketRegime}, 신호강도: ${risePercent}%`);
+
                 await pool.query(
                   `INSERT INTO trade_history
                    (code, name, action, quantity, price, analysis, market_regime, created_at)
@@ -847,8 +851,9 @@ export async function POST(req: NextRequest) {
                     marketRegime,
                   ]
                 );
+                console.log(`✅ [${name}] trade_history 저장 완료`);
               } catch (saveErr: any) {
-                console.log(`⚠️ [${name}] trade_history 저장 실패: ${saveErr.message}`);
+                console.error(`❌ [${name}] trade_history 저장 실패: ${saveErr instanceof Error ? saveErr.message : String(saveErr)}`);
               }
 
               // trade_positions에 추가 (DB 통합)

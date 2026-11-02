@@ -361,6 +361,10 @@ export async function POST(req: NextRequest) {
 
               // 거래 이력 저장
               try {
+                console.log(`📝 [${name}] trade_history 저장 시도:`);
+                console.log(`   - 코드: ${code}, 수량: ${actualSellQty}주, 가격: ${sellPrice.toLocaleString()}원`);
+                console.log(`   - 수익률: ${profitPct.toFixed(2)}%, 이유: ${sellReason}`);
+
                 await pool.query(
                   `INSERT INTO trade_history (code, name, action, quantity, price, analysis, created_at)
                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
@@ -377,8 +381,9 @@ export async function POST(req: NextRequest) {
                     }),
                   ]
                 );
+                console.log(`✅ [${name}] trade_history 저장 완료`);
               } catch (saveErr: any) {
-                console.log(`⚠️ [${name}] trade_history 저장 실패: ${saveErr.message}`);
+                console.error(`❌ [${name}] trade_history 저장 실패: ${saveErr instanceof Error ? saveErr.message : String(saveErr)}`);
               }
 
               // trade_positions 업데이트 (재진입 기준 포함)
@@ -386,8 +391,16 @@ export async function POST(req: NextRequest) {
                 // profit_loss = (판매가 - 진입가) × 수량 (전체 손익)
                 const totalProfitLoss = (sellPrice - entry_price) * actualSellQty;
 
-                // 재진입 기준: 매도가 × 1.01 (1% 상승 기준)
+                // 재진입 기준: 매도가 × 1.01 (1% 상승 기준) - sellPrice 유효성 확인
+                if (sellPrice <= 0) {
+                  throw new Error(`Invalid sellPrice: ${sellPrice} (must be > 0)`);
+                }
                 const reentryThreshold = Math.floor(sellPrice * 1.01);
+
+                console.log(`📊 [${name}] trade_positions 업데이트 준비:`);
+                console.log(`   - 매도가: ${sellPrice.toLocaleString()}원`);
+                console.log(`   - 손익: ${totalProfitLoss.toLocaleString()}원`);
+                console.log(`   - 재진입 기준: ${reentryThreshold.toLocaleString()}원`);
 
                 await pool.query(
                   `UPDATE trade_positions
@@ -398,7 +411,7 @@ export async function POST(req: NextRequest) {
                   [sellPrice, totalProfitLoss, reentryThreshold, sellPrice, id]
                 );
                 console.log(`✅ [${name}] 매도 완료: ${sellPrice.toLocaleString()}원`);
-                console.log(`   → 재진입 기준: ${reentryThreshold.toLocaleString()}원 (×1.02)`)
+                console.log(`   → 재진입 기준: ${reentryThreshold.toLocaleString()}원 (매도가 × 1.01)`)
               } catch (updateErr: any) {
                 console.error(`❌ [${name}] trade_positions 업데이트 실패: ${updateErr.message}`);
               }
