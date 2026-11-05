@@ -514,9 +514,15 @@ export async function POST(req: NextRequest) {
     let orderableAmount = 0;
 
     // 1단계: getBalance()로 실제 예수금액 조회 (재시도 로직 포함)
+    // ⚠️ 레이트 리미트 대응: 첫 시도 실패 시 1초 대기 후 재시도
     const maxRetries = 3;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        // 레이트 리미트 대응: 재시도 전 대기
+        if (attempt > 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt - 1)));
+        }
+
         console.log(`📊 [시도 ${attempt}/${maxRetries}] getBalance() 호출 중...`);
         const balanceData = await kis.getBalance();
 

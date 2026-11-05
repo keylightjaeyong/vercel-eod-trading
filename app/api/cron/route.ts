@@ -98,15 +98,19 @@ async function getBalance(token: string): Promise<number> {
     if (data.rt_cd === '0' && data.output2) {
       const cash = data.output2[0]?.dnca_tot_amt || '0';
       const balance = parseInt(cash, 10);
+
+      if (balance <= 0) {
+        throw new Error('계좌 잔액이 0 이하입니다');
+      }
+
       console.log(`✅ 실제 잔고: ${balance.toLocaleString()} KRW`);
       return balance;
     } else {
-      console.warn(`⚠️ 잔고 조회 실패: ${data.msg1}, 기본값 사용`);
-      return 300000;
+      throw new Error(`❌ 잔고 조회 실패: ${data.msg1 || '알 수 없는 오류'}`);
     }
   } catch (error) {
-    console.warn(`⚠️ 잔고 조회 오류: ${error}, 기본값 사용`);
-    return 300000;
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`❌ KIS API 잔고 조회 오류: ${errorMsg}`);
   }
 }
 
@@ -171,13 +175,15 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error('\n❌ 거래 사이클 실패:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('\n❌ 거래 사이클 실패:', errorMsg);
     console.log('═══════════════════════════════════════\n');
 
+    // 계좌 정보 오류는 거래를 중단해야 함
     return NextResponse.json(
       {
-        success: true, // 프론트엔드가 깨지지 않도록 200 반환
-        message: '거래 사이클 실행됨 (오류 무시)',
+        success: false,
+        message: `❌ 거래 사이클 중단: ${errorMsg}`,
         error: String(error),
         timestamp: new Date().toISOString(),
       },
