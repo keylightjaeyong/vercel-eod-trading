@@ -818,39 +818,24 @@ export async function POST(req: NextRequest) {
               console.warn(`⚠️ 할당비율 조회 실패, 기본값 100% 사용: ${err}`);
             }
 
-            // 매수가능조회 API 사용 (공식 권장 - 증거금률, 수수료 포함)
+            // ⭐ getBalance()에서 받은 예수금액을 직접 사용
+            // (getOrderableAmount API가 0을 반환하는 이슈 해결)
             let actualBuyQty = 0;
-            try {
-              const orderableQty = await kis.getOrderableAmount(code, currentPrice);
 
-              // ⭐ T+2 대기 중에도 사용 가능한 재사용가능금액(ruse_psbl_amt) 우선 사용!
-              const usableAmount = orderableQty.ruse_psbl_amt > 0
-                ? orderableQty.ruse_psbl_amt
-                : orderableQty.ord_psbl_cash;
+            console.log(`💰 [${name}] 매수 수량 계산:`);
+            console.log(`   - 예수금액: ${orderableAmount.toLocaleString()}원`);
+            console.log(`   - 현재가: ${currentPrice.toLocaleString()}원`);
 
-              const maxAvailableQty = usableAmount > 0
-                ? Math.floor(usableAmount / currentPrice)
-                : orderableQty.nrcvb_buy_qty; // 금액이 없으면 수량 사용
+            // 보수적으로 예수금액의 70% 사용 (증거금, 수수료 고려)
+            const safeUsableAmount = Math.floor(orderableAmount * 0.7 * (allocationPct / 100));
+            actualBuyQty = Math.floor(safeUsableAmount / currentPrice);
 
-              // allocation_pct 적용
-              actualBuyQty = Math.floor(maxAvailableQty * (allocationPct / 100));
+            console.log(`   - 사용비율: 70% × ${allocationPct}% = ${(70 * allocationPct / 100).toFixed(1)}%`);
+            console.log(`   - 사용금액: ${safeUsableAmount.toLocaleString()}원`);
+            console.log(`   - 최종매수수량: ${actualBuyQty}주`);
 
-              console.log(`💰 [${name}] KIS 매수가능조회 결과:`);
-              console.log(`   - 재사용가능금액: ${orderableQty.ruse_psbl_amt.toLocaleString()}원 ⭐ (T+2 대기 중에도 사용 가능!)`);
-              console.log(`   - 주문가능현금: ${orderableQty.ord_psbl_cash.toLocaleString()}원`);
-              console.log(`   - 미수없는매수수량: ${orderableQty.nrcvb_buy_qty.toLocaleString()}주`);
-              console.log(`   - 사용금액: ${usableAmount.toLocaleString()}원 → 최대수량: ${maxAvailableQty.toLocaleString()}주`);
-              console.log(`   - 할당비율 ${allocationPct}% 적용 → 최종매수수량: ${actualBuyQty}주`);
-              console.log(`   - 현재가: ${currentPrice.toLocaleString()}원`);
-              console.log(`   - 예상 매수액: ${Math.floor(actualBuyQty * currentPrice).toLocaleString()}원`);
-            } catch (orderableErr) {
-              console.warn(`⚠️ [${name}] 매수가능조회 실패: ${orderableErr instanceof Error ? orderableErr.message : String(orderableErr)}, 계좌잔액 기반 폴백`);
-              // 폴백: 계좌 잔액 기반 (증거금률, 수수료 미반영 - 보수적 계산)
-              // 손실을 피하기 위해 계좌잔액의 90%만 사용
-              const safeAmount = Math.floor(orderableAmount * 0.9 * (allocationPct / 100));
-              actualBuyQty = Math.floor(safeAmount / currentPrice);
-              console.log(`   - 폴백: 계좌잔액 90% 기반 매수수량 ${actualBuyQty}주 (보수적)`);
-            }
+            // 참고: getOrderableAmount() API는 현재 0을 반환하고 있어서
+            // getBalance()의 dnca_tot_amt (예수금액)를 직접 사용
 
             if (actualBuyQty > 0) {
               // 매수 실행 (재시도 로직 포함)
