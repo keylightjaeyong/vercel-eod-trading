@@ -215,7 +215,11 @@ async function checkStopLoss(pool: any, kis: any) {
 
           // 매도 실행 (전체 수량 매도)
           const quantity = parseInt(pos.quantity) || 1;
-          await kis.sell(pos.code, quantity);
+          const sellResult = await kis.sell(pos.code, quantity);
+
+          if (!sellResult) {
+            throw new Error(`kis.sell() failed for ${pos.code}`);
+          }
 
           // DB 업데이트 (total profit/loss 계산)
           const totalProfitLoss = (price - pos.entry_price) * quantity;
@@ -225,6 +229,18 @@ async function checkStopLoss(pool: any, kis: any) {
                  profit_loss = $2, updated_at = NOW()
              WHERE id = $3`,
             [price, totalProfitLoss, pos.id]
+          );
+
+          // trade_history에 손절매 기록
+          await pool.query(
+            `INSERT INTO trade_history (code, name, action, quantity, price, analysis, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+            [pos.code, pos.name, 'STOP_LOSS', quantity, price, JSON.stringify({
+              reason: 'Stop Loss',
+              lossPct: lossPct.toFixed(2),
+              stopLossPct: stopLoss,
+              entryPrice: pos.entry_price
+            })]
           );
 
           return; // 한 번에 하나만 처리
@@ -275,7 +291,11 @@ async function checkTrailingStop(pool: any, kis: any) {
 
           // 매도 실행 (전체 수량 매도)
           const quantity = parseInt(pos.quantity) || 1;
-          await kis.sell(pos.code, quantity);
+          const sellResult = await kis.sell(pos.code, quantity);
+
+          if (!sellResult) {
+            throw new Error(`kis.sell() failed for ${pos.code}`);
+          }
 
           // DB 업데이트 (total profit/loss 계산)
           const totalProfitLoss = (price - pos.entry_price) * quantity;
@@ -285,6 +305,19 @@ async function checkTrailingStop(pool: any, kis: any) {
                  profit_loss = $2, updated_at = NOW()
              WHERE id = $3`,
             [price, totalProfitLoss, pos.id]
+          );
+
+          // trade_history에 추적손절 기록
+          await pool.query(
+            `INSERT INTO trade_history (code, name, action, quantity, price, analysis, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+            [pos.code, pos.name, 'TRAILING_STOP', quantity, price, JSON.stringify({
+              reason: 'Trailing Stop Loss',
+              profitPct: profitPct.toFixed(2),
+              highestPrice: highestPrice,
+              trailingPct: trailingPctAbs,
+              entryPrice: pos.entry_price
+            })]
           );
 
           return; // 한 번에 하나만 처리
@@ -667,7 +700,11 @@ export async function POST(req: NextRequest) {
             try {
               await pool.query(
                 `UPDATE trade_positions SET last_reference_low = $1, updated_at = CURRENT_TIMESTAMP
-                 WHERE code = $2 AND status = 'sold' ORDER BY exit_time DESC LIMIT 1`,
+                 WHERE id = (
+                   SELECT id FROM trade_positions
+                   WHERE code = $2 AND status = 'sold'
+                   ORDER BY exit_time DESC LIMIT 1
+                 )`,
                 [updatedLowest, code]
               );
               console.log(`📍 [${name}] 극강저점 업데이트: ${last_reference_low?.toLocaleString()}원 → ${updatedLowest.toLocaleString()}원`);
@@ -680,6 +717,12 @@ export async function POST(req: NextRequest) {
           // ⭐ 동적 재진입 임계값 계산 (극강저점 + 시장 상황별 상승폭)
           // 극강 저점을 기준으로 시장 상황에 따라 다른 상승폭 적용
           const reentryValidPrices = prices.filter(p => p > 0);
+
+          if (reentryValidPrices.length === 0) {
+            console.warn(`⚠️ [${name}] 유효한 재진입 가격 없음 (모든 가격이 0원 이하)`);
+            continue;
+          }
+
           const currentLowest = Math.min(...reentryValidPrices);
 
           // 극강저점 우선 사용 (없으면 현재 저점)
@@ -827,10 +870,10 @@ export async function POST(req: NextRequest) {
                 }
               }
 
-              if (orderResult) {
-              console.log(
-                `✅ [${name}] 매수 완료: ${actualBuyQty}주 @ ${currentPrice}원`
-              );
+              if (orderResult && orderResult.order_number) {
+                console.log(
+                  `✅ [${name}] 매수 완료: ${actualBuyQty}주 @ ${currentPrice}원 (주문번호: ${orderResult.order_number})`
+                );
 
               // 📢 Telegram 알림
               try {

@@ -314,7 +314,13 @@ export async function POST(req: NextRequest) {
             let apiSellQty = quantity;
             try {
               const sellableInfo = await kis.getSellableAmount(code);
-              apiSellQty = sellableInfo.ord_psbl_qty; // 주문가능수량 사용
+
+              // ord_psbl_qty 검증
+              if (!sellableInfo || sellableInfo.ord_psbl_qty === undefined || sellableInfo.ord_psbl_qty === null) {
+                throw new Error('getSellableAmount() returned invalid ord_psbl_qty');
+              }
+
+              apiSellQty = Math.max(0, Math.floor(sellableInfo.ord_psbl_qty)); // 주문가능수량 사용
               // DB 보유수량과 API 수량의 최소값을 사용 (둘 다 만족)
               actualSellQty = Math.min(quantity, apiSellQty);
               console.log(`✅ [${name}] 실제 매도가능수량: ${actualSellQty}주 (DB: ${quantity}주, API: ${apiSellQty}주 중 최소값)`);
@@ -337,7 +343,12 @@ export async function POST(req: NextRequest) {
             while (sellAttempt < maxSellRetries) {
               try {
                 sellResponse = await kis.sell(code, actualSellQty);
-                console.log(`✅ [${name}] 매도 주문 성공: ${sellPrice}원`);
+
+                if (!sellResponse || !sellResponse.order_number) {
+                  throw new Error(`kis.sell() returned invalid response: ${JSON.stringify(sellResponse)}`);
+                }
+
+                console.log(`✅ [${name}] 매도 주문 성공: ${actualSellQty}주 @ ${sellPrice}원 (주문번호: ${sellResponse.order_number})`);
                 break;
               } catch (err: any) {
                 sellAttempt++;
