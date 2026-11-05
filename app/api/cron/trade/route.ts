@@ -826,11 +826,11 @@ export async function POST(req: NextRequest) {
             console.log(`   - 예수금액: ${orderableAmount.toLocaleString()}원`);
             console.log(`   - 현재가: ${currentPrice.toLocaleString()}원`);
 
-            // 보수적으로 예수금액의 70% 사용 (증거금, 수수료 고려)
-            const safeUsableAmount = Math.floor(orderableAmount * 0.7 * (allocationPct / 100));
+            // 예수금액의 90% 사용 (증거금, 수수료 고려)
+            const safeUsableAmount = Math.floor(orderableAmount * 0.9 * (allocationPct / 100));
             actualBuyQty = Math.floor(safeUsableAmount / currentPrice);
 
-            console.log(`   - 사용비율: 70% × ${allocationPct}% = ${(70 * allocationPct / 100).toFixed(1)}%`);
+            console.log(`   - 사용비율: 90% × ${allocationPct}% = ${(90 * allocationPct / 100).toFixed(1)}%`);
             console.log(`   - 사용금액: ${safeUsableAmount.toLocaleString()}원`);
             console.log(`   - 최종매수수량: ${actualBuyQty}주`);
 
